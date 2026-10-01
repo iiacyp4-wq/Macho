@@ -115,28 +115,37 @@ function rectDefault(v) {
   return w;
 }
 
-// 잠금화면 직사각형 — "칼로리": 숫자 하나만 아주 크게
+// 잠금화면 직사각형 — "칼로리": 남은 칼로리 크게 + 진행 막대
 function rectKcal(v) {
   const w = new ListWidget();
-  big(w, String(Math.abs(leftNum(v))), 38);
-  small(w, `kcal ${leftNum(v) >= 0 ? '남음' : '초과'} · 먹음 ${Math.round(v.k)}`, 13);
+  const top = w.addStack();
+  top.bottomAlignContent();
+  big(top, String(Math.abs(leftNum(v))), 32);
+  top.addSpacer(4);
+  small(top, `kcal ${leftNum(v) >= 0 ? '남음' : '초과'}`, 13);
+  w.addSpacer(4);
+  const img = w.addImage(bar(v.k / (v.gk || 1), 150, 7, WHITE, DIM));
+  img.imageSize = new Size(150, 7);
+  w.addSpacer(3);
+  small(w, `먹음 ${Math.round(v.k)} / ${Math.round(v.gk)}`, 13);
   return w;
 }
 
-// 잠금화면 직사각형 — "탄단지": 세 줄로 크게
+// 잠금화면 직사각형 — "탄단지": 기본 모양(세 칸 + 막대)을 크게
 function rectMacros(v) {
   const w = new ListWidget();
+  const row = w.addStack();
   MACROS.forEach(([label, key], i) => {
-    const row = w.addStack();
-    row.centerAlignContent();
-    small(row, label, 15);
-    row.addSpacer(6);
-    const img = row.addImage(bar(v[key] / (v.goals[key] || 1), 56, 7, WHITE, DIM));
-    img.imageSize = new Size(56, 7);
-    row.addSpacer(6);
-    big(row, `${Math.round(v[key])}`, 16);
-    small(row, `/${Math.round(v.goals[key])}g`, 12);
-    if (i < 2) w.addSpacer(1);
+    const col = row.addStack();
+    col.layoutVertically();
+    small(col, label, 12);
+    big(col, String(Math.round(v[key])), 22);
+    col.addSpacer(2);
+    const img = col.addImage(bar(v[key] / (v.goals[key] || 1), 46, 6, WHITE, DIM));
+    img.imageSize = new Size(46, 6);
+    col.addSpacer(1);
+    small(col, `/${Math.round(v.goals[key])}g`, 11);
+    if (i < 2) row.addSpacer(6);
   });
   return w;
 }

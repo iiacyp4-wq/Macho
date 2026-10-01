@@ -3,7 +3,7 @@
 // icon-color: deep-blue; icon-glyph: chart-bar;
 
 // Macho 탄단지 위젯 (막대)
-// 버전: v1.7
+// 버전: v1.10
 // 이 스크립트 이름은 "MachoBar" 로 저장하세요.
 // 숫자는 "Macho" 스크립트가 저장해 둔 것을 읽어요. (Macho 앱 → 잠금화면에 반영)
 
@@ -49,7 +49,7 @@ function text(stack, str, size, bold) {
   return t;
 }
 
-// 잠금화면 직사각형: 세 칸 (이름 / 먹은 g / 막대 / 목표 g)
+// 잠금화면 직사각형: 세 칸 (막대 / 먹은 g / 목표 g / 이름)
 function rectWidget(v) {
   const w = new ListWidget();
   w.setPadding(0, 0, 0, 0);
@@ -58,13 +58,13 @@ function rectWidget(v) {
     const col = row.addStack();
     col.size = new Size(48, 0); // 칸 폭 고정 → 숫자가 길어져도 막대 위치 그대로
     col.layoutVertically();
-    text(col, label, 12, false);
-    text(col, String(Math.round(v[key])), 22, true);
-    col.addSpacer(2);
+    // 순서: 막대 → 먹은 양 → 목표 → 이름
     const img = col.addImage(bar(v[key] / (v.goals[key] || 1), 46, 6));
     img.imageSize = new Size(46, 6);
-    col.addSpacer(1);
+    col.addSpacer(3);
+    text(col, String(Math.round(v[key])), 22, true);
     text(col, `/${Math.round(v.goals[key])}g`, 11, false);
+    text(col, label, 11, false);
     if (i < 2) row.addSpacer(6);
   });
   return w;

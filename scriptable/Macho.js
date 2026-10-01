@@ -84,11 +84,20 @@ function text(stack, str, size, bold) {
   t.font = font(size, bold); t.lineLimit = 1; t.minimumScaleFactor = 0.6;
   return t;
 }
+// 가로 가운데 정렬: 양옆에 빈 공간을 넣은 줄 안에 글자를 둠
+function centered(stack, str, size, bold) {
+  const line = stack.addStack();
+  line.addSpacer();
+  text(line, str, size, bold);
+  line.addSpacer();
+  return line;
+}
 
 // ---------- 위젯 ----------
 // 잠금화면 직사각형: 왼쪽 링(가운데 총 섭취) + 오른쪽 끼니별 칼로리
 function rectWidget(v) {
   const w = new ListWidget();
+  w.setPadding(0, 0, 0, 0);
   const row = w.addStack();
   row.centerAlignContent();
 
@@ -98,12 +107,13 @@ function rectWidget(v) {
   ringBox.layoutVertically();
   ringBox.centerAlignContent();
   ringBox.addSpacer();
-  const n = text(ringBox, String(Math.round(v.k)), 16, true); n.centerAlignText();
-  const g = text(ringBox, `/${Math.round(v.gk)}`, 9, false); g.centerAlignText();
+  centered(ringBox, String(Math.round(v.k)), 16, true);
+  centered(ringBox, `/${Math.round(v.gk)}`, 9, false);
   ringBox.addSpacer();
 
-  row.addSpacer(10);
+  row.addSpacer(8);
   const list = row.addStack();
+  list.size = new Size(82, 0); // 폭 고정 (높이는 내용에 맞춤)
   list.layoutVertically();
   MEALS.forEach(([name, key, alpha], i) => {
     const line = list.addStack();
@@ -122,8 +132,8 @@ function rectWidget(v) {
 function circleWidget(v) {
   const w = new ListWidget();
   w.backgroundImage = mealRing(v, 64, 7);
-  const n = text(w, String(Math.round(v.k)), 16, true); n.centerAlignText();
-  const g = text(w, 'kcal', 9, false); g.centerAlignText();
+  centered(w, String(Math.round(v.k)), 16, true);
+  centered(w, 'kcal', 9, false);
   return w;
 }
 

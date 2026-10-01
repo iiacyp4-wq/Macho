@@ -51,9 +51,11 @@ function text(stack, str, size, bold) {
 // 잠금화면 직사각형: 세 칸 (이름 / 먹은 g / 막대 / 목표 g)
 function rectWidget(v) {
   const w = new ListWidget();
+  w.setPadding(0, 0, 0, 0);
   const row = w.addStack();
   MACROS.forEach(([label, key], i) => {
     const col = row.addStack();
+    col.size = new Size(48, 0); // 칸 폭 고정 → 숫자가 길어져도 막대 위치 그대로
     col.layoutVertically();
     text(col, label, 12, false);
     text(col, String(Math.round(v[key])), 22, true);

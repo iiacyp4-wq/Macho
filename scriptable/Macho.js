@@ -74,44 +74,83 @@ const leftText = (v) => {
 };
 
 // ---------- 위젯 모양 ----------
-// 잠금화면 직사각형 (+ 홈 화면용 컬러 버전)
-function rectWidget(v, colored) {
-  const w = new ListWidget();
-  if (colored) w.backgroundColor = new Color('#111827');
-  const title = w.addText(leftText(v));
-  title.font = Font.boldSystemFont(colored ? 18 : 14);
-  if (colored) title.textColor = Color.white();
-  title.lineLimit = 1; title.minimumScaleFactor = 0.7;
-  w.addSpacer(colored ? 10 : 4);
+// 위젯 설정의 Parameter 칸에 적은 글자로 모양을 고름
+//   직사각형: (비움) = 칼로리+탄단지 / 칼로리 = 남은 칼로리만 크게 / 탄단지 = 탄단지만 크게
+//   원형:     (비움) = 칼로리 / 탄 / 단 / 지
+const PARAM = String(args.widgetParameter || '').trim();
+const WHITE = Color.white();
+const DIM = new Color('#ffffff', 0.3);
+const big = (stack, text, size) => {
+  const t = stack.addText(text);
+  t.font = Font.boldRoundedSystemFont ? Font.boldRoundedSystemFont(size) : Font.boldSystemFont(size);
+  t.lineLimit = 1; t.minimumScaleFactor = 0.5;
+  return t;
+};
+const small = (stack, text, size) => {
+  const t = stack.addText(text);
+  t.font = Font.semiboldSystemFont(size); t.lineLimit = 1; t.minimumScaleFactor = 0.6;
+  return t;
+};
+const leftNum = (v) => Math.round(v.gk - v.k);
 
+// 잠금화면 직사각형 — 기본: 남은 칼로리 크게 + 탄단지
+function rectDefault(v) {
+  const w = new ListWidget();
+  const top = w.addStack();
+  top.bottomAlignContent();
+  big(top, String(Math.abs(leftNum(v))), 26);
+  top.addSpacer(4);
+  small(top, leftNum(v) >= 0 ? 'kcal 남음' : 'kcal 초과', 12);
+  w.addSpacer(3);
   const row = w.addStack();
-  if (colored) row.layoutVertically();
-  MACROS.forEach(([label, key, hex], i) => {
+  MACROS.forEach(([label, key], i) => {
     const col = row.addStack();
     col.layoutVertically();
-    const t = col.addText(`${label} ${Math.round(v[key])}/${Math.round(v.goals[key])}`);
-    t.font = Font.semiboldSystemFont(colored ? 12 : 10);
-    if (colored) t.textColor = Color.white();
-    t.lineLimit = 1; t.minimumScaleFactor = 0.6;
-    col.addSpacer(2);
-    const bw = colored ? 120 : 44;
-    const img = col.addImage(bar(v[key] / (v.goals[key] || 1), bw, 4,
-      colored ? new Color(hex) : Color.white(), new Color('#ffffff', colored ? 0.15 : 0.3)));
-    img.imageSize = new Size(bw, 4);
-    if (i < 2) row.addSpacer(colored ? 6 : 6);
+    small(col, `${label} ${Math.round(v[key])}`, 15);
+    col.addSpacer(3);
+    const img = col.addImage(bar(v[key] / (v.goals[key] || 1), 46, 5, WHITE, DIM));
+    img.imageSize = new Size(46, 5);
+    if (i < 2) row.addSpacer(6);
   });
   return w;
 }
 
-// 잠금화면 원형
+// 잠금화면 직사각형 — "칼로리": 숫자 하나만 아주 크게
+function rectKcal(v) {
+  const w = new ListWidget();
+  big(w, String(Math.abs(leftNum(v))), 38);
+  small(w, `kcal ${leftNum(v) >= 0 ? '남음' : '초과'} · 먹음 ${Math.round(v.k)}`, 13);
+  return w;
+}
+
+// 잠금화면 직사각형 — "탄단지": 세 줄로 크게
+function rectMacros(v) {
+  const w = new ListWidget();
+  MACROS.forEach(([label, key], i) => {
+    const row = w.addStack();
+    row.centerAlignContent();
+    small(row, label, 15);
+    row.addSpacer(6);
+    const img = row.addImage(bar(v[key] / (v.goals[key] || 1), 56, 7, WHITE, DIM));
+    img.imageSize = new Size(56, 7);
+    row.addSpacer(6);
+    big(row, `${Math.round(v[key])}`, 16);
+    small(row, `/${Math.round(v.goals[key])}g`, 12);
+    if (i < 2) w.addSpacer(1);
+  });
+  return w;
+}
+
+// 잠금화면 원형 — 링 하나에 숫자 하나
 function circleWidget(v) {
   const w = new ListWidget();
-  w.backgroundImage = ring(v.k / (v.gk || 1), 64, 6, Color.white(), new Color('#ffffff', 0.3));
-  const left = Math.round(v.gk - v.k);
-  const n = w.addText(String(Math.abs(left)));
-  n.font = Font.boldSystemFont(14); n.centerAlignText(); n.minimumScaleFactor = 0.6; n.lineLimit = 1;
-  const s = w.addText(left >= 0 ? '남음' : '초과');
-  s.font = Font.systemFont(9); s.centerAlignText();
+  const m = MACROS.find(([label]) => label === PARAM);
+  const frac = m ? v[m[1]] / (v.goals[m[1]] || 1) : v.k / (v.gk || 1);
+  w.backgroundImage = ring(frac, 64, 7, WHITE, DIM);
+  const n = big(w, m ? String(Math.round(v[m[1]])) : String(Math.abs(leftNum(v))), m ? 20 : 17);
+  n.centerAlignText();
+  const s = small(w, m ? `${m[0]}/${Math.round(v.goals[m[1]])}` : (leftNum(v) >= 0 ? '남음' : '초과'), 10);
+  s.centerAlignText();
   return w;
 }
 
@@ -122,13 +161,34 @@ function inlineWidget(v) {
   return w;
 }
 
+// 홈 화면용 컬러 위젯
+function homeWidget(v) {
+  const w = new ListWidget();
+  w.backgroundColor = new Color('#111827');
+  const title = big(w, leftText(v), 20);
+  title.textColor = WHITE;
+  w.addSpacer(10);
+  MACROS.forEach(([label, key, hex], i) => {
+    const t = small(w, `${label} ${Math.round(v[key])}/${Math.round(v.goals[key])}g`, 13);
+    t.textColor = WHITE;
+    w.addSpacer(3);
+    const img = w.addImage(bar(v[key] / (v.goals[key] || 1), 120, 6, new Color(hex), new Color('#ffffff', 0.15)));
+    img.imageSize = new Size(120, 6);
+    if (i < 2) w.addSpacer(6);
+  });
+  return w;
+}
+
 // ---------- 실행 ----------
 const v = read();
 const fam = config.widgetFamily || '';
 let widget;
 if (fam === 'accessoryCircular') widget = circleWidget(v);
 else if (fam === 'accessoryInline') widget = inlineWidget(v);
-else widget = rectWidget(v, !fam.startsWith('accessory') && config.runsInWidget);
+else if (config.runsInWidget && !fam.startsWith('accessory')) widget = homeWidget(v);
+else if (PARAM === '칼로리') widget = rectKcal(v);
+else if (PARAM === '탄단지') widget = rectMacros(v);
+else widget = rectDefault(v);
 widget.refreshAfterDate = new Date(Date.now() + 5 * 60 * 1000);
 
 if (config.runsInWidget) {

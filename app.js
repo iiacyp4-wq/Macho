@@ -454,6 +454,13 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ---------- 시작 ----------
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+if ('serviceWorker' in navigator) {
+  // 새 버전이 설치되면 한 번 새로고침해서 바로 적용
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (hadController) location.reload(); });
+  navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' }).then((reg) => {
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update(); });
+  });
+}
 renderToday();
 updateNotification();

@@ -3,6 +3,7 @@
 // icon-color: deep-blue; icon-glyph: chart-bar;
 
 // Macho 탄단지 위젯 (막대)
+// 버전: v1.7
 // 이 스크립트 이름은 "MachoBar" 로 저장하세요.
 // 숫자는 "Macho" 스크립트가 저장해 둔 것을 읽어요. (Macho 앱 → 잠금화면에 반영)
 

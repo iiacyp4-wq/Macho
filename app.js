@@ -1,5 +1,8 @@
 'use strict';
 
+// 고칠 때마다 올리는 버전 (탭바 오른쪽 아래, 설정 맨 아래에 표시)
+const APP_VERSION = 'v1.7';
+
 const STORE_KEY = 'macho:v1';
 const MEALS = [
   { id: 'breakfast', name: '아침' },
@@ -303,6 +306,7 @@ function renderSettings() {
   updateGoalCalc();
   $('#widget-toggle').checked = state.widget;
   prefetchScript();
+  renderVersionInfo();
   $('#notify-toggle').checked = state.notify && notifPermission() === 'granted';
   renderNotifyStatus();
   $('#custom-list').innerHTML = state.customFoods.length
@@ -457,6 +461,19 @@ document.addEventListener('visibilitychange', () => {
   if (todayKey() !== lastToday) { lastToday = todayKey(); currentDay = lastToday; }
   renderToday(); updateNotification();
 });
+
+// ---------- 버전 표시 ----------
+$('#app-version').textContent = APP_VERSION;
+async function renderVersionInfo() {
+  const scriptVer = async (name) => {
+    try {
+      const t = scriptTexts[name] || (scriptTexts[name] = await (await fetch(`scriptable/${name}.js`)).text());
+      return (t.match(/버전: (\S+)/) || [])[1] || '?';
+    } catch { return '?'; }
+  };
+  const [a, b] = await Promise.all([scriptVer('Macho'), scriptVer('MachoBar')]);
+  $('#version-info').innerHTML = `앱 <b>${APP_VERSION}</b> · 위젯 스크립트 Macho <b>${a}</b> / MachoBar <b>${b}</b><br>Scriptable에 넣은 스크립트 맨 위 "버전"이 이 숫자와 같으면 최신이에요.`;
+}
 
 // ---------- 시작 ----------
 if ('serviceWorker' in navigator) {

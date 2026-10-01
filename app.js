@@ -1,7 +1,7 @@
 'use strict';
 
 // 고칠 때마다 올리는 버전 (탭바 오른쪽 아래, 설정 맨 아래에 표시)
-const APP_VERSION = 'v1.13';
+const APP_VERSION = 'v1.14';
 
 const STORE_KEY = 'macho:v1';
 const MEALS = [
@@ -121,18 +121,19 @@ function renderToday() {
   $('#meals').innerHTML = MEALS.map((meal) => {
     const items = entries.filter((e) => e.meal === meal.id);
     const kcal = items.reduce((s, e) => s + scale(e.food, e.grams).k, 0);
-    return `<section class="card">
+    return `<section class="card meal">
       <div class="meal-head">
-        <div><h2>${meal.name}</h2><span class="meal-kcal">${r0(kcal)} kcal</span></div>
-        <button class="add-btn" data-add="${meal.id}" aria-label="${meal.name} 추가">＋</button>
+        <div class="meal-title"><h2>${meal.name}</h2>${items.length ? `<span class="meal-count">${items.length}개</span>` : ''}</div>
+        <div class="meal-right"><span class="meal-kcal"><b>${r0(kcal).toLocaleString()}</b> kcal</span>
+        <button class="add-btn" data-add="${meal.id}" aria-label="${meal.name} 추가">＋</button></div>
       </div>
-      ${items.map((e) => {
+      ${items.length ? '<div class="meal-items">' : ''}${items.map((e) => {
         const v = scale(e.food, e.grams);
         return `<div class="entry" data-entry="${e.id}">
           <div><div class="entry-name">${esc(e.food.n)}</div>
           <div class="entry-sub">${r0(e.grams)}g · 탄 ${r1(v.c)} · 단 ${r1(v.p)} · 지 ${r1(v.f)}${e.food.miss?.length ? ' · <span class="miss">일부 정보 없음</span>' : ''}</div></div>
           <div class="entry-kcal">${r0(v.k)} kcal</div></div>`;
-      }).join('')}
+      }).join('')}${items.length ? '</div>' : ''}
     </section>`;
   }).join('');
 }

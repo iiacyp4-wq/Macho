@@ -3,7 +3,7 @@
 // icon-color: deep-green; icon-glyph: utensils;
 
 // Macho 칼로리 위젯 (원형)
-// 버전: v1.18
+// 버전: v1.19
 // 이 스크립트 이름을 반드시 "Macho" 로 저장하세요. (Macho 앱의 반영 버튼이 이 이름을 부르고,
 // 받은 숫자를 저장해서 MachoBar 위젯도 같이 씁니다)
 
@@ -33,6 +33,10 @@ function read() {
   const v = { gk: g.c * 4 + g.p * 4 + g.f * 9 };
   for (const [, key] of MEALS) v[key] = fresh ? (s[key] || 0) : 0;
   v.k = fresh ? s.k : 0;
+  // 연속 기록: 오늘이나 어제 반영한 값만 유효 (그보다 오래되면 끊긴 것)
+  const y = new Date(); y.setDate(y.getDate() - 1);
+  const yKey = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, '0')}-${String(y.getDate()).padStart(2, '0')}`;
+  v.st = s && (fresh || s.d === yKey) ? (s.st || 0) : 0;
   return v;
 }
 
@@ -110,6 +114,17 @@ function rectWidget(v) {
   ringBox.addSpacer();
   centered(ringBox, String(Math.round(v.k)), 16, true);
   centered(ringBox, `/${Math.round(v.gk)}`, 9, false);
+  // 연속 기록 일수 (불꽃)
+  ringBox.addSpacer(1);
+  const streak = ringBox.addStack();
+  streak.centerAlignContent();
+  streak.addSpacer();
+  const flame = streak.addImage(SFSymbol.named('flame.fill').image);
+  flame.imageSize = new Size(9, 9);
+  flame.tintColor = Color.white();
+  streak.addSpacer(1);
+  text(streak, String(v.st), 10, true);
+  streak.addSpacer();
   ringBox.addSpacer();
 
   row.addSpacer(8);

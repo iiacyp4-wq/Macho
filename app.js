@@ -1,7 +1,7 @@
 'use strict';
 
 // 고칠 때마다 올리는 버전 (탭바 오른쪽 아래, 설정 맨 아래에 표시)
-const APP_VERSION = 'v1.12';
+const APP_VERSION = 'v1.13';
 
 const STORE_KEY = 'macho:v1';
 const MEALS = [
@@ -98,7 +98,8 @@ function renderToday() {
   const left = goal - t.k;
 
   $('#kcal-left').textContent = Math.abs(r0(left)).toLocaleString();
-  $('#kcal-left-label').textContent = left >= 0 ? 'kcal 남음' : 'kcal 초과';
+  $('#kcal-left-label').textContent = left >= 0 ? '남음' : '초과';
+  $('#kcal-left').classList.toggle('over-text', left < 0);
   $('#kcal-eaten').textContent = r0(t.k).toLocaleString();
   $('#kcal-goal').textContent = goal.toLocaleString();
   const ring = $('#ring-fg');

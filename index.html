@@ -50,8 +50,33 @@
   </main>
 
   <main id="view-history" class="view">
-    <h1 class="title">최근 7일</h1>
-    <section class="card" id="history"></section>
+    <h1 class="title">기록</h1>
+    <section class="card">
+      <div class="week-head">
+        <button class="icon-btn" id="week-prev" aria-label="지난주">‹</button>
+        <div class="center"><b id="week-label"></b><div class="muted small" id="week-sub"></div></div>
+        <button class="icon-btn" id="week-next" aria-label="다음 주">›</button>
+      </div>
+      <div id="week-bars"></div>
+    </section>
+    <section class="card">
+      <h2>추세</h2>
+      <div class="seg" id="trend-range">
+        <button data-range="30" class="active">1개월</button>
+        <button data-range="90">3개월</button>
+        <button data-range="365">1년</button>
+        <button data-range="all">전체</button>
+      </div>
+      <div class="seg" id="trend-metric">
+        <button data-metric="k" class="active">칼로리</button>
+        <button data-metric="c">탄수화물</button>
+        <button data-metric="p">단백질</button>
+        <button data-metric="f">지방</button>
+      </div>
+      <div class="trend-stats" id="trend-stats"></div>
+      <div class="trend-chart" id="trend-chart"></div>
+      <p class="muted small" id="trend-note"></p>
+    </section>
   </main>
 
   <main id="view-settings" class="view">

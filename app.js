@@ -1,7 +1,7 @@
 'use strict';
 
 // 고칠 때마다 올리는 버전 (탭바 오른쪽 아래, 설정 맨 아래에 표시)
-const APP_VERSION = 'v1.11';
+const APP_VERSION = 'v1.12';
 
 const STORE_KEY = 'macho:v1';
 const MEALS = [
@@ -457,28 +457,174 @@ async function lookupBarcode(raw) {
 }
 
 // ---------- 기록 ----------
+const METRIC = {
+  k: { name: '칼로리', unit: 'kcal', color: 'var(--accent)', goal: () => goalKcal(), better: 'under' },
+  c: { name: '탄수화물', unit: 'g', color: 'var(--c)', goal: () => state.goals.c, better: 'under' },
+  p: { name: '단백질', unit: 'g', color: 'var(--p)', goal: () => state.goals.p, better: 'over' },
+  f: { name: '지방', unit: 'g', color: 'var(--f)', goal: () => state.goals.f, better: 'under' },
+};
+let weekOffset = 0, trendRange = '30', trendMetric = 'k';
+const hasLog = (k) => (state.log[k] || []).length > 0;
+const md = (k) => { const d = keyToDate(k); return `${d.getMonth() + 1}/${d.getDate()}`; };
+const DOW = '일월화수목금토';
+
 function renderHistory() {
+  renderWeek();
+  renderTrend();
+}
+
+// 주 단위 (월~일)
+function renderWeek() {
   const t = todayKey();
+  const back = (keyToDate(t).getDay() + 6) % 7; // 월요일까지 며칠 전
+  const monday = addDays(t, -back + weekOffset * 7);
+  const days = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
   const goal = goalKcal();
-  const days = Array.from({ length: 7 }, (_, i) => addDays(t, i - 6));
   const totals = days.map(totalsFor);
   const max = Math.max(goal * 1.2, ...totals.map((x) => x.k)) || 1;
-  const logged = totals.filter((x) => x.k > 0);
+  const logged = days.map((k, i) => (hasLog(k) ? totals[i] : null)).filter(Boolean);
   const avg = (key) => (logged.length ? logged.reduce((s, x) => s + x[key], 0) / logged.length : 0);
 
-  $('#history').innerHTML = days.map((k, i) => {
+  $('#week-label').textContent = `${md(days[0])}(월) – ${md(days[6])}(일)`;
+  $('#week-sub').textContent = weekOffset === 0 ? '이번 주' : weekOffset === -1 ? '지난주' : `${-weekOffset}주 전`;
+  $('#week-next').disabled = weekOffset >= 0;
+  $('#week-bars').innerHTML = days.map((k, i) => {
     const x = totals[i];
     const seg = (key, mult) => `<i style="width:${((x[key] * mult) / max) * 100}%;background:var(--${key})"></i>`;
-    const d = keyToDate(k);
-    return `<div class="hist-row">
-      <span>${d.getMonth() + 1}/${d.getDate()} ${'일월화수목금토'[d.getDay()]}</span>
+    const cls = k > t ? ' future' : k === t ? ' today' : '';
+    return `<button class="hist-row${cls}" data-day="${k}">
+      <span>${md(k)} ${DOW[keyToDate(k).getDay()]}</span>
       <div class="hist-bar">${seg('c', 4)}${seg('p', 4)}${seg('f', 9)}<span class="hist-goal" style="left:${(goal / max) * 100}%"></span></div>
-      <span class="hist-kcal">${r0(x.k)}</span></div>`;
+      <span class="hist-kcal">${hasLog(k) ? r0(x.k) : '–'}</span></button>`;
   }).join('') + `
     <div class="legend"><span style="--dot:var(--c)">탄수화물</span><span style="--dot:var(--p)">단백질</span><span style="--dot:var(--f)">지방</span><span>│ 세로선 = 목표</span></div>
-    <div class="avg">기록한 날 평균 (${logged.length}일)<br>
+    <div class="avg">이번 주 기록한 날 평균 (${logged.length}일)<br>
       <b>${r0(avg('k'))} kcal</b> · 탄 ${r0(avg('c'))}g · 단 ${r0(avg('p'))}g · 지 ${r0(avg('f'))}g</div>`;
 }
+$('#week-prev').onclick = () => { weekOffset--; renderWeek(); };
+$('#week-next').onclick = () => { if (weekOffset < 0) { weekOffset++; renderWeek(); } };
+$('#week-bars').onclick = (ev) => {
+  const row = ev.target.closest('[data-day]');
+  if (!row || row.dataset.day > todayKey()) return;
+  currentDay = row.dataset.day;
+  showView('today');
+};
+
+// 추세 그래프
+function trendPoints() {
+  const t = todayKey();
+  const keys = Object.keys(state.log).filter(hasLog).sort();
+  const start = trendRange === 'all' ? (keys[0] || t) : addDays(t, -(+trendRange - 1));
+  const span = Math.round((keyToDate(t) - keyToDate(start)) / 864e5) + 1;
+  const daily = keys.filter((k) => k >= start && k <= t).map((k) => ({ k, v: totalsFor(k)[trendMetric] }));
+  if (span <= 120) return { start, span, weekly: false, pts: daily.map((d) => ({ ...d, x: (keyToDate(d.k) - keyToDate(start)) / 864e5 })) };
+  // 기간이 길면 주 평균으로 묶음
+  const byWeek = new Map();
+  for (const d of daily) {
+    const w = Math.floor((keyToDate(d.k) - keyToDate(start)) / 864e5 / 7);
+    if (!byWeek.has(w)) byWeek.set(w, []);
+    byWeek.get(w).push(d);
+  }
+  const pts = [...byWeek].map(([w, ds]) => ({ k: ds[0].k, x: w * 7 + 3, v: ds.reduce((s, d) => s + d.v, 0) / ds.length, n: ds.length }));
+  return { start, span, weekly: true, pts };
+}
+const niceStep = (max) => { const raw = max / 4, p = 10 ** Math.floor(Math.log10(raw)); return [1, 2, 2.5, 5, 10].map((m) => m * p).find((s) => s >= raw); };
+
+function renderTrend() {
+  $$('#trend-range button').forEach((b) => b.classList.toggle('active', b.dataset.range === trendRange));
+  $$('#trend-metric button').forEach((b) => b.classList.toggle('active', b.dataset.metric === trendMetric));
+  const m = METRIC[trendMetric];
+  const goal = m.goal();
+  const { start, span, weekly, pts } = trendPoints();
+  const box = $('#trend-chart');
+
+  // 요약 숫자 (하루 단위로 계산)
+  const t = todayKey();
+  const days = Object.keys(state.log).filter((k) => hasLog(k) && k >= start && k <= t);
+  const vals = days.map((k) => totalsFor(k)[trendMetric]);
+  const avg = vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : 0;
+  const hit = vals.filter((v) => (m.better === 'over' ? v >= goal : v <= goal)).length;
+  $('#trend-stats').innerHTML = `
+    <div><b>${vals.length ? r0(avg).toLocaleString() : '–'}</b><span>평균 ${m.unit}</span></div>
+    <div><b>${vals.length}일</b><span>기록한 날</span></div>
+    <div><b>${vals.length ? hit + '일' : '–'}</b><span>목표 ${m.better === 'over' ? '이상' : '이하'}</span></div>`;
+  $('#trend-note').textContent = (weekly ? '점 하나 = 그 주에 기록한 날의 평균. ' : '점 하나 = 하루. ')
+    + '기록하지 않은 날은 비워 둬요. 가로선 = 목표.';
+
+  if (!pts.length) {
+    box.innerHTML = '<div class="empty">이 기간에 기록이 없어요. 음식을 기록하면 여기에 그래프가 그려져요.</div>';
+    return;
+  }
+
+  const W = Math.max(box.clientWidth, 260), H = 170, L = 38, R = 10, T = 12, B = 22;
+  const vmax = Math.max(goal * 1.15, ...pts.map((p) => p.v)) || 1;
+  const step = niceStep(vmax), top = Math.ceil(vmax / step) * step;
+  const sx = (x) => L + (span <= 1 ? (W - L - R) / 2 : (x / (span - 1)) * (W - L - R));
+  const sy = (v) => T + (1 - v / top) * (H - T - B);
+
+  let grid = '';
+  for (let v = 0; v <= top + 1e-9; v += step) {
+    grid += `<line x1="${L}" x2="${W - R}" y1="${sy(v)}" y2="${sy(v)}" stroke="var(--line)" stroke-width="1"/>
+      <text x="${L - 6}" y="${sy(v) + 3}" text-anchor="end">${r0(v).toLocaleString()}</text>`;
+  }
+  const xl = [0, Math.floor((span - 1) / 2), span - 1].filter((v, i, a) => a.indexOf(v) === i);
+  const ym = (k) => { const d = keyToDate(k); return `${String(d.getFullYear()).slice(2)}.${d.getMonth() + 1}`; };
+  const xlab = xl.map((d, i) => `<text x="${sx(d)}" y="${H - 6}" text-anchor="${i === 0 ? 'start' : i === xl.length - 1 ? 'end' : 'middle'}">${(span > 200 ? ym : md)(addDays(start, d))}</text>`).join('');
+
+  // 하루(또는 한 주)가 비면 선을 끊음
+  const gapLimit = weekly ? 7 : 1;
+  const runs = [];
+  pts.forEach((p, i) => {
+    if (i === 0 || p.x - pts[i - 1].x > gapLimit) runs.push([]);
+    runs[runs.length - 1].push(p);
+  });
+  const lines = runs.map((run) => {
+    if (run.length === 1) return `<circle cx="${sx(run[0].x)}" cy="${sy(run[0].v)}" r="3" fill="${m.color}"/>`;
+    const d = run.map((p, i) => `${i ? 'L' : 'M'}${sx(p.x).toFixed(1)},${sy(p.v).toFixed(1)}`).join('');
+    const area = `${d}L${sx(run[run.length - 1].x).toFixed(1)},${sy(0)}L${sx(run[0].x).toFixed(1)},${sy(0)}Z`;
+    return `<path d="${area}" fill="${m.color}" opacity=".1"/><path d="${d}" fill="none" stroke="${m.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  }).join('');
+  const last = pts[pts.length - 1];
+  const goalY = sy(goal);
+
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="${m.name} 추세">
+    ${grid}
+    <line x1="${L}" x2="${W - R}" y1="${goalY}" y2="${goalY}" stroke="var(--text)" stroke-width="1" opacity=".55"/>
+    <text x="${W - R}" y="${goalY - 4}" text-anchor="end">목표 ${r0(goal).toLocaleString()}</text>
+    ${lines}
+    <circle cx="${sx(last.x)}" cy="${sy(last.v)}" r="4.5" fill="${m.color}" stroke="var(--card)" stroke-width="2"/>
+    ${xlab}
+    <line id="trend-cross" x1="0" x2="0" y1="${T}" y2="${H - B}" stroke="var(--muted)" stroke-width="1" visibility="hidden"/>
+    <circle id="trend-dot" r="4.5" fill="${m.color}" stroke="var(--card)" stroke-width="2" visibility="hidden"/>
+  </svg><div class="trend-tip" id="trend-tip" hidden></div>`;
+
+  // 손가락/마우스 위치에서 가장 가까운 점 보여 주기
+  const svg = box.querySelector('svg');
+  const show = (ev) => {
+    const rect = svg.getBoundingClientRect();
+    const px = ((ev.clientX - rect.left) / rect.width) * W;
+    let best = pts[0];
+    for (const p of pts) if (Math.abs(sx(p.x) - px) < Math.abs(sx(best.x) - px)) best = p;
+    const cx = sx(best.x), cy = sy(best.v);
+    const cross = $('#trend-cross'), dot = $('#trend-dot'), tip = $('#trend-tip');
+    cross.setAttribute('x1', cx); cross.setAttribute('x2', cx); cross.setAttribute('visibility', 'visible');
+    dot.setAttribute('cx', cx); dot.setAttribute('cy', cy); dot.setAttribute('visibility', 'visible');
+    const when = weekly ? `${md(best.k)} 주 (${best.n}일 평균)` : `${md(best.k)} ${DOW[keyToDate(best.k).getDay()]}`;
+    tip.textContent = `${when} · ${r0(best.v).toLocaleString()} ${m.unit}`;
+    tip.hidden = false;
+    const left = (cx / W) * rect.width;
+    tip.style.left = `${Math.min(Math.max(left, 70), rect.width - 70)}px`;
+    tip.style.top = `${Math.max(0, (cy / H) * rect.height - 34)}px`;
+  };
+  svg.onpointerdown = svg.onpointermove = show;
+  svg.onpointerleave = () => {
+    $('#trend-cross')?.setAttribute('visibility', 'hidden');
+    $('#trend-dot')?.setAttribute('visibility', 'hidden');
+    $('#trend-tip').hidden = true;
+  };
+}
+$('#trend-range').onclick = (ev) => { const b = ev.target.closest('[data-range]'); if (b) { trendRange = b.dataset.range; renderTrend(); } };
+$('#trend-metric').onclick = (ev) => { const b = ev.target.closest('[data-metric]'); if (b) { trendMetric = b.dataset.metric; renderTrend(); } };
 
 // ---------- 설정 ----------
 function renderSettings() {

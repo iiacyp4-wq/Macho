@@ -5,7 +5,7 @@
   --muted: #6b7280;
   --line: #e5e7eb;
   --accent: #16a34a;
-  --c: #f5a623;
+  --c: #d97706;
   --p: #3b82f6;
   --f: #ec4899;
   --danger: #dc2626;
@@ -90,6 +90,20 @@ h2 { font-size: 16px; margin: 0 0 12px; }
 .hist-kcal { text-align: right; }
 .legend { display: flex; gap: 12px; font-size: 12px; color: var(--muted); margin-top: 8px; flex-wrap: wrap; }
 .legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; background: var(--dot); }
+.week-head { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; margin-bottom: 4px; }
+.week-head .icon-btn:disabled { opacity: .25; }
+.hist-row { width: 100%; background: none; border: 0; text-align: left; border-radius: 8px; }
+.hist-row:active { background: var(--line); }
+.hist-row.future { opacity: .4; }
+.hist-row.today span:first-child { font-weight: 700; color: var(--accent); }
+.trend-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 4px 0 8px; }
+.trend-stats div { display: flex; flex-direction: column; }
+.trend-stats b { font-size: 18px; font-variant-numeric: tabular-nums; }
+.trend-stats span { font-size: 12px; color: var(--muted); }
+.trend-chart { position: relative; touch-action: pan-y; }
+.trend-chart svg { display: block; width: 100%; overflow: visible; }
+.trend-chart text { fill: var(--muted); font-size: 10px; font-variant-numeric: tabular-nums; }
+.trend-tip { position: absolute; top: 0; transform: translateX(-50%); background: var(--text); color: var(--card); font-size: 12px; padding: 4px 8px; border-radius: 8px; white-space: nowrap; pointer-events: none; }
 .avg { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 14px; line-height: 1.7; }
 
 /* 탭바 */

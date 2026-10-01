@@ -105,6 +105,15 @@ h2 { font-size: 16px; margin: 0 0 12px; }
 .sheet-head { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; margin-bottom: 8px; }
 .sheet-head h2 { text-align: center; margin: 0; font-size: 17px; }
 .search { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); font-size: 16px; }
+.search-row { display: flex; gap: 8px; margin-top: 8px; }
+.search-row:first-of-type { margin-top: 0; }
+.search-row .search { flex: 1; min-width: 0; }
+.scan-btn { white-space: nowrap; padding: 0 14px; }
+.scan-box { position: relative; width: 100%; aspect-ratio: 4 / 3; background: #000; border-radius: 16px; overflow: hidden; margin: 4px 0 8px; }
+.scan-box video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.scan-frame { position: absolute; left: 12%; right: 12%; top: 32%; bottom: 32%; border: 3px solid var(--accent); border-radius: 12px; box-shadow: 0 0 0 999px rgba(0,0,0,.35); }
+.src { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 6px; background: var(--line); color: var(--muted); margin-right: 4px; vertical-align: 1px; }
+.miss { color: var(--over); }
 .seg { display: flex; background: var(--line); border-radius: 12px; padding: 3px; margin: 12px 0; }
 .seg button { flex: 1; border: 0; background: none; padding: 8px 0; border-radius: 10px; font-size: 14px; }
 .seg button.active { background: var(--card); font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,.12); }

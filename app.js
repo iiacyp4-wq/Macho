@@ -1,7 +1,7 @@
 'use strict';
 
 // 고칠 때마다 올리는 버전 (탭바 오른쪽 아래, 설정 맨 아래에 표시)
-const APP_VERSION = 'v1.7';
+const APP_VERSION = 'v1.8';
 
 const STORE_KEY = 'macho:v1';
 const MEALS = [
@@ -23,6 +23,7 @@ function defaultState() {
     customFoods: [],
     log: {},        // { 'YYYY-MM-DD': [entry] }
     recent: [],     // food 객체 스냅샷 (최근 사용 순)
+    barcodes: {},   // { 바코드: food } 한 번 찾거나 입력한 제품
     notify: false,
     widget: false,   // 아이폰 Scriptable 잠금화면 위젯 사용
     widgetSent: '', // 마지막으로 위젯에 보낸 값
@@ -128,7 +129,7 @@ function renderToday() {
         const v = scale(e.food, e.grams);
         return `<div class="entry" data-entry="${e.id}">
           <div><div class="entry-name">${esc(e.food.n)}</div>
-          <div class="entry-sub">${r0(e.grams)}g · 탄 ${r1(v.c)} · 단 ${r1(v.p)} · 지 ${r1(v.f)}</div></div>
+          <div class="entry-sub">${r0(e.grams)}g · 탄 ${r1(v.c)} · 단 ${r1(v.p)} · 지 ${r1(v.f)}${e.food.miss?.length ? ' · <span class="miss">일부 정보 없음</span>' : ''}</div></div>
           <div class="entry-kcal">${r0(v.k)} kcal</div></div>`;
       }).join('')}
     </section>`;
@@ -150,7 +151,7 @@ $('#meals').onclick = (ev) => {
 
 // ---------- 시트 공통 ----------
 function openSheet(id) { $$('.sheet').forEach((s) => (s.hidden = s.id !== id)); }
-function closeSheets() { $$('.sheet').forEach((s) => (s.hidden = true)); }
+function closeSheets() { stopScan(); $$('.sheet').forEach((s) => (s.hidden = true)); }
 $$('[data-close]').forEach((b) => (b.onclick = closeSheets));
 
 // ---------- 검색 ----------
@@ -163,35 +164,78 @@ function openSearch(meal) {
   $('#search-input').value = '';
   setSearchTab(state.recent.length ? 'recent' : 'all');
   openSheet('search-sheet');
+  loadDB();
 }
 function setSearchTab(tab) {
   searchTab = tab;
   $$('#search-tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   renderFoodList();
 }
-function foodPool() {
-  const q = $('#search-input').value.trim().replace(/\s/g, '');
-  if (q) {
-    // 검색어가 있으면 전체에서 찾기
-    const all = [...state.customFoods, ...BASE_FOODS];
-    return all.filter((f) => f.n.replace(/\s/g, '').includes(q));
+// ---------- 음식 DB (식약처 음식 + 농진청 원재료, 약 2만 개) ----------
+let DB = null, dbLoading = null;
+const norm = (s) => String(s).toLowerCase().replace(/[\s,()·_\-/[\]]/g, '');
+function loadDB() {
+  dbLoading ||= fetch('fooddb.json').then((r) => r.json()).then((d) => {
+    DB = d.items.map((r) => ({ key: norm(r[0]), r }));
+    if (!$('#search-sheet').hidden) renderFoodList();
+  }).catch(() => { dbLoading = null; });
+  return dbLoading;
+}
+// DB 한 줄(100g 기준) → 앱 음식(1회 제공량 기준)
+function dbFood(r) {
+  const [n, kind, g, k, c, p, f] = r;
+  const x = g / 100;
+  const miss = [['c', c], ['p', p], ['f', f]].filter(([, v]) => v == null).map(([m]) => m);
+  return { n, u: kind === '원재료' ? '100g' : '1회 제공량', g, k: k * x, c: (c || 0) * x, p: (p || 0) * x, f: (f || 0) * x, src: kind, miss };
+}
+// "닭가슴살" → "닭고기, 가슴살"처럼 글자가 순서대로 들어 있으면 찾음
+function isSubseq(q, s) {
+  let i = 0;
+  for (const ch of s) if (ch === q[i] && ++i === q.length) return true;
+  return false;
+}
+function searchFoods(raw) {
+  const words = raw.split(/\s+/).map(norm).filter(Boolean);
+  const q = words.join('');
+  const local = [...state.customFoods, ...BASE_FOODS].filter((f) => words.every((w) => norm(f.n).includes(w)));
+  if (!DB) return local;
+  const hits = [];
+  for (const it of DB) {
+    let score;
+    if (words.every((w) => it.key.includes(w))) score = it.key.startsWith(words[0]) ? 0 : 1;
+    else if (q.length >= 2 && isSubseq(q, it.key)) score = 3;
+    else continue;
+    if (it.r[1] !== '음식' && it.r[1] !== '원재료') score += 2; // 프랜차이즈는 뒤로
+    if (it.r[4] == null || it.r[6] == null) score += 1;        // 탄·지 없는 건 뒤로
+    hits.push([score + it.key.length / 1000, it.r]);
   }
+  hits.sort((x, y) => x[0] - y[0]);
+  return [...local, ...hits.slice(0, 80).map(([, r]) => dbFood(r))];
+}
+
+function foodPool() {
+  const q = $('#search-input').value.trim();
+  if (q) return searchFoods(q);
   if (searchTab === 'recent') return state.recent;
   if (searchTab === 'mine') return state.customFoods;
   return BASE_FOODS;
 }
 let listedFoods = [];
+const macroText = (f, m, label) => (f.miss?.includes(m) ? `${label} <span class="miss">?</span>` : `${label} ${r1(f[m])}`);
 function renderFoodList() {
   listedFoods = foodPool();
+  const q = $('#search-input').value.trim();
   const emptyMsg = { recent: '아직 기록한 음식이 없어요', mine: '직접 입력한 음식이 여기에 저장돼요', all: '검색 결과가 없어요' }[searchTab];
+  const dbNote = !q && searchTab === 'all' ? '<div class="empty">위에서 검색하면 음식·원재료 약 2만 개에서 찾아요</div>' : '';
   $('#food-list').innerHTML = listedFoods.length
     ? listedFoods.map((f, i) => `<button class="food-item" data-i="${i}">
         <div><div class="entry-name">${esc(f.n)}</div>
-        <div class="entry-sub">${esc(f.u || '')} (${r0(f.g)}g) · 탄 ${r1(f.c)} · 단 ${r1(f.p)} · 지 ${r1(f.f)}</div></div>
-        <div class="entry-kcal">${r0(f.k)} kcal</div></button>`).join('')
-    : `<div class="empty">${$('#search-input').value.trim() ? '검색 결과가 없어요. 아래에서 직접 입력해 보세요.' : emptyMsg}</div>`;
+        <div class="entry-sub">${f.src ? `<span class="src">${esc(f.src)}</span>` : ''}${esc(f.u || '')} (${r0(f.g)}g) · ${macroText(f, 'c', '탄')} · ${macroText(f, 'p', '단')} · ${macroText(f, 'f', '지')}</div></div>
+        <div class="entry-kcal">${r0(f.k)} kcal</div></button>`).join('') + dbNote
+    : `<div class="empty">${q ? (DB ? '검색 결과가 없어요. 아래에서 직접 입력해 보세요.' : '음식 목록을 불러오는 중이에요…') : emptyMsg}</div>`;
 }
-$('#search-input').oninput = renderFoodList;
+let searchTimer;
+$('#search-input').oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(renderFoodList, 150); };
 $('#search-tabs').onclick = (ev) => { const b = ev.target.closest('button'); if (b) setSearchTab(b.dataset.tab); };
 $('#food-list').onclick = (ev) => {
   const b = ev.target.closest('[data-i]');
@@ -204,9 +248,11 @@ let amountCtx = null; // { food, meal, entry }
 function openAmount(food, meal, entry = null) {
   amountCtx = { food, meal, entry };
   $('#amount-title').textContent = food.n;
-  $('#amount-unit').textContent = `1회 제공량: ${food.u || ''} = ${r0(food.g)}g · ${r0(food.k)} kcal`;
+  const unitName = !food.u || food.u === '1회 제공량' ? '1회' : food.u;
+  $('#amount-unit').innerHTML = `1회 제공량: ${food.u && food.u !== '1회 제공량' ? esc(food.u) + ' = ' : ''}${r0(food.g)}g · ${r0(food.k)} kcal`
+    + (food.miss?.length ? `<br><span class="miss">${food.miss.map((m) => ({ c: '탄수화물', p: '단백질', f: '지방' })[m]).join('·')} 정보가 없어서 0으로 계산돼요</span>` : '');
   $('#amount-g').value = r1(entry ? entry.grams : food.g);
-  $('#serving-chips').innerHTML = [0.5, 1, 1.5, 2, 3].map((x) => `<button data-x="${x}">${esc(food.u || '1회')}${x === 1 ? '' : ' ×' + x}</button>`).join('');
+  $('#serving-chips').innerHTML = [0.5, 1, 1.5, 2, 3].map((x) => `<button data-x="${x}">${esc(unitName)}${x === 1 ? '' : ' ×' + x}</button>`).join('');
   $('#meal-select').innerHTML = MEALS.map((m) => `<button data-meal="${m.id}" class="${m.id === meal ? 'active' : ''}">${m.name}</button>`).join('');
   $('#amount-save').textContent = entry ? '수정' : '추가';
   $('#amount-delete').hidden = !entry;
@@ -257,24 +303,125 @@ $('#amount-delete').onclick = () => {
 };
 
 // ---------- 직접 입력 ----------
-$('#custom-btn').onclick = () => {
-  $('#cf-name').value = $('#search-input').value.trim();
+let pendingBarcode = null;
+function openCustom(name, barcode = null) {
+  pendingBarcode = barcode;
+  $('#cf-hint').textContent = barcode
+    ? `바코드 ${barcode} 제품을 처음 봤어요. 포장지 영양성분표를 보고 입력하면 다음부터 이 바코드로 바로 나와요.`
+    : '식품 포장지 영양성분표를 보고 입력하세요.';
+  $('#cf-name').value = name;
   ['#cf-unit', '#cf-c', '#cf-p', '#cf-f', '#cf-k'].forEach((s) => ($(s).value = ''));
   $('#cf-g').value = 100;
   openSheet('custom-sheet');
-};
+}
+$('#custom-btn').onclick = () => openCustom($('#search-input').value.trim());
 $('#cf-submit').onclick = () => {
   const name = $('#cf-name').value.trim();
   if (!name) return toast('이름을 입력해 주세요');
   const num = (s) => parseFloat($(s).value) || 0;
   const food = { n: name, u: $('#cf-unit').value.trim() || '1회', g: num('#cf-g') || 100, c: num('#cf-c'), p: num('#cf-p'), f: num('#cf-f') };
   food.k = $('#cf-k').value ? num('#cf-k') : r0(kcalOf(food));
+  if (pendingBarcode) { food.bc = pendingBarcode; state.barcodes[pendingBarcode] = food; save(); }
   if ($('#cf-save').checked) {
     state.customFoods = [food, ...state.customFoods.filter((f) => f.n !== name)];
     save();
   }
   openAmount(food, pendingMeal);
 };
+
+// ---------- 바코드 ----------
+let scanReader = null, zxingLoading = null;
+function loadZXing() {
+  zxingLoading ||= new Promise((resolve, reject) => {
+    const el = document.createElement('script');
+    el.src = 'vendor/zxing.min.js';
+    el.onload = resolve;
+    el.onerror = () => { zxingLoading = null; reject(new Error('zxing')); };
+    document.head.appendChild(el);
+  });
+  return zxingLoading;
+}
+function newReader() {
+  const hints = new Map();
+  const F = ZXing.BarcodeFormat;
+  hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E]);
+  hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+  return new ZXing.BrowserMultiFormatReader(hints, 250);
+}
+const scanStatus = (msg) => ($('#scan-status').textContent = msg);
+function stopScan() {
+  if (scanReader) { try { scanReader.reset(); } catch {} scanReader = null; }
+}
+async function openScan() {
+  $('#scan-code').value = '';
+  scanStatus('카메라를 켜는 중…');
+  openSheet('scan-sheet');
+  try {
+    await loadZXing();
+    stopScan();
+    scanReader = newReader();
+    await scanReader.decodeFromConstraints({ video: { facingMode: 'environment' } }, $('#scan-video'), (result) => {
+      if (!result) return;
+      stopScan();
+      lookupBarcode(result.getText());
+    });
+    scanStatus('바코드를 가운데 네모에 맞춰 주세요');
+  } catch {
+    stopScan();
+    scanStatus('카메라를 열 수 없어요. 아래 "사진으로 찍어서 찾기"를 눌러 주세요.');
+  }
+}
+$('#scan-btn').onclick = openScan;
+$('#scan-photo').onchange = async (ev) => {
+  const file = ev.target.files[0];
+  ev.target.value = '';
+  if (!file) return;
+  scanStatus('사진에서 바코드를 찾는 중…');
+  const url = URL.createObjectURL(file);
+  try {
+    await loadZXing();
+    const result = await newReader().decodeFromImageUrl(url);
+    stopScan();
+    lookupBarcode(result.getText());
+  } catch {
+    scanStatus('사진에서 바코드를 못 찾았어요. 바코드가 크고 선명하게 나오게 다시 찍어 주세요.');
+  } finally { URL.revokeObjectURL(url); }
+};
+$('#scan-go').onclick = () => lookupBarcode($('#scan-code').value);
+
+async function lookupBarcode(raw) {
+  const code = String(raw).replace(/\D/g, '');
+  if (code.length < 8) return scanStatus('바코드 숫자를 8자리 이상 입력해 주세요');
+  if (state.barcodes[code]) return openAmount(state.barcodes[code], pendingMeal);
+  scanStatus(`${code} 찾는 중…`);
+  let name = '';
+  try {
+    const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json?fields=product_name,product_name_ko,brands,nutriments,serving_quantity,product_quantity`);
+    const d = await res.json();
+    const p = d.status === 1 ? d.product : null;
+    const n = p?.nutriments || {};
+    name = [p?.brands?.split(',')[0]?.trim(), p?.product_name_ko || p?.product_name].filter(Boolean).join(' ');
+    let k100 = n['energy-kcal_100g'];
+    if (k100 == null && n.energy_100g != null) k100 = n.energy_100g / 4.184;
+    if (p && k100 != null) {
+      const sq = Number(p.serving_quantity), pq = Number(p.product_quantity);
+      const g = sq > 0 ? sq : pq > 0 && pq <= 500 ? pq : 100;
+      const x = g / 100;
+      const keys = { c: 'carbohydrates_100g', p: 'proteins_100g', f: 'fat_100g' };
+      const food = {
+        n: name || `바코드 ${code}`, u: sq > 0 ? '1회 제공량' : pq > 0 && pq <= 500 ? '1개' : '100g', g,
+        k: k100 * x, c: (n[keys.c] || 0) * x, p: (n[keys.p] || 0) * x, f: (n[keys.f] || 0) * x,
+        src: '바코드', bc: code, miss: Object.keys(keys).filter((m) => n[keys[m]] == null),
+      };
+      state.barcodes[code] = food;
+      save();
+      return openAmount(food, pendingMeal);
+    }
+  } catch {
+    toast('인터넷 연결을 확인해 주세요');
+  }
+  openCustom(name, code);
+}
 
 // ---------- 기록 ----------
 function renderHistory() {

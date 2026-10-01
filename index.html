@@ -106,6 +106,7 @@
     </section>
 
     <p class="muted small center" id="version-info"></p>
+    <p class="muted small center">음식 데이터: 식품의약품안전처 식품영양성분 DB, 농촌진흥청 국가표준식품성분표<br>바코드 데이터: Open Food Facts (ODbL)</p>
   </main>
 
   <nav class="tabbar">
@@ -122,7 +123,10 @@
       <h2 id="search-title">음식 추가</h2>
       <span></span>
     </div>
-    <input type="search" id="search-input" class="search" placeholder="음식 검색 (예: 닭가슴살)" autocomplete="off">
+    <div class="search-row">
+      <input type="search" id="search-input" class="search" placeholder="음식 검색 (예: 닭가슴살)" autocomplete="off">
+      <button class="btn scan-btn" id="scan-btn" aria-label="바코드 찍기">▥ 바코드</button>
+    </div>
     <div class="seg" id="search-tabs">
       <button data-tab="recent" class="active">최근</button>
       <button data-tab="all">전체</button>
@@ -130,6 +134,23 @@
     </div>
     <div class="food-list" id="food-list"></div>
     <button class="btn wide" id="custom-btn">＋ 직접 입력하기</button>
+  </div>
+
+  <!-- 바코드 시트 -->
+  <div class="sheet" id="scan-sheet" hidden>
+    <div class="sheet-head">
+      <button class="icon-btn" data-close aria-label="닫기">✕</button>
+      <h2>바코드 찍기</h2>
+      <span></span>
+    </div>
+    <div class="scan-box"><video id="scan-video" playsinline muted></video><div class="scan-frame"></div></div>
+    <p class="muted center small" id="scan-status">바코드를 가운데 네모에 맞춰 주세요</p>
+    <label class="btn wide">사진으로 찍어서 찾기<input type="file" id="scan-photo" accept="image/*" capture="environment" hidden></label>
+    <div class="search-row">
+      <input type="text" id="scan-code" class="search" inputmode="numeric" placeholder="바코드 숫자 직접 입력" autocomplete="off">
+      <button class="btn" id="scan-go">찾기</button>
+    </div>
+    <p class="muted small">제품 정보는 Open Food Facts에서 찾아요. 없는 제품은 한 번 직접 입력하면 다음부터 바코드로 바로 나와요.</p>
   </div>
 
   <!-- 양 선택 시트 -->
@@ -155,7 +176,7 @@
       <h2>직접 입력</h2>
       <span></span>
     </div>
-    <p class="muted small">식품 포장지 영양성분표를 보고 입력하세요.</p>
+    <p class="muted small" id="cf-hint">식품 포장지 영양성분표를 보고 입력하세요.</p>
     <label class="field"><span>이름</span><input id="cf-name" placeholder="예: 편의점 닭가슴살 샐러드"></label>
     <label class="field"><span>단위 이름</span><input id="cf-unit" placeholder="예: 1팩"></label>
     <label class="field"><span>1회 제공량 (g)</span><input type="number" inputmode="decimal" id="cf-g" value="100"></label>

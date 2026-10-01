@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Macho">
+  <title>Macho</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main id="view-today" class="view active">
+    <header class="datebar">
+      <button class="icon-btn" id="prev-day" aria-label="이전 날">‹</button>
+      <button class="date-label" id="date-label"></button>
+      <button class="icon-btn" id="next-day" aria-label="다음 날">›</button>
+    </header>
+
+    <section class="card summary">
+      <div class="ring-wrap">
+        <svg viewBox="0 0 120 120" class="ring">
+          <circle cx="60" cy="60" r="52" class="ring-bg"/>
+          <circle cx="60" cy="60" r="52" class="ring-fg" id="ring-fg"/>
+        </svg>
+        <div class="ring-text">
+          <div class="ring-num" id="kcal-left">0</div>
+          <div class="ring-sub" id="kcal-left-label">kcal 남음</div>
+        </div>
+      </div>
+      <div class="side-stats">
+        <div><span class="muted">섭취</span><b id="kcal-eaten">0</b></div>
+        <div><span class="muted">목표</span><b id="kcal-goal">0</b></div>
+      </div>
+      <div class="macros">
+        <div class="macro" data-m="c"><div class="macro-top"><span>탄수화물</span><span class="mv"></span></div><div class="bar"><i></i></div></div>
+        <div class="macro" data-m="p"><div class="macro-top"><span>단백질</span><span class="mv"></span></div><div class="bar"><i></i></div></div>
+        <div class="macro" data-m="f"><div class="macro-top"><span>지방</span><span class="mv"></span></div><div class="bar"><i></i></div></div>
+      </div>
+    </section>
+
+    <div id="meals"></div>
+  </main>
+
+  <main id="view-history" class="view">
+    <h1 class="title">최근 7일</h1>
+    <section class="card" id="history"></section>
+  </main>
+
+  <main id="view-settings" class="view">
+    <h1 class="title">설정</h1>
+    <section class="card">
+      <h2>하루 목표</h2>
+      <label class="field"><span>탄수화물 (g)</span><input type="number" inputmode="decimal" id="goal-c"></label>
+      <label class="field"><span>단백질 (g)</span><input type="number" inputmode="decimal" id="goal-p"></label>
+      <label class="field"><span>지방 (g)</span><input type="number" inputmode="decimal" id="goal-f"></label>
+      <p class="muted small">칼로리 목표 = 탄×4 + 단×4 + 지×9 = <b id="goal-kcal-calc">0</b> kcal</p>
+      <button class="btn primary" id="save-goals">목표 저장</button>
+    </section>
+
+    <section class="card">
+      <h2>잠금화면 알림 <span class="tag">실험</span></h2>
+      <p class="muted small">오늘 섭취 현황을 알림으로 띄워 잠금화면에서 볼 수 있게 합니다. 기록할 때마다 갱신됩니다. 안드로이드(크롬)에서 가장 잘 동작하고, 아이폰은 홈 화면에 추가한 뒤에만 가능합니다.</p>
+      <label class="switch-row"><span>현황 알림 켜기</span><input type="checkbox" id="notify-toggle"></label>
+      <p class="muted small" id="notify-status"></p>
+    </section>
+
+    <section class="card">
+      <h2>내 음식</h2>
+      <div id="custom-list"></div>
+    </section>
+
+    <section class="card">
+      <h2>백업</h2>
+      <p class="muted small">기록은 이 폰의 브라우저 안에만 저장됩니다. 폰을 바꾸거나 브라우저 데이터를 지우기 전에 백업해 두세요.</p>
+      <div class="row">
+        <button class="btn" id="export-btn">백업 파일 저장</button>
+        <label class="btn">불러오기<input type="file" id="import-file" accept="application/json" hidden></label>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar">
+    <button data-view="today" class="active"><span class="ti">◎</span>오늘</button>
+    <button data-view="history"><span class="ti">▥</span>기록</button>
+    <button data-view="settings"><span class="ti">⚙</span>설정</button>
+  </nav>
+
+  <!-- 음식 검색 시트 -->
+  <div class="sheet" id="search-sheet" hidden>
+    <div class="sheet-head">
+      <button class="icon-btn" data-close aria-label="닫기">✕</button>
+      <h2 id="search-title">음식 추가</h2>
+      <span></span>
+    </div>
+    <input type="search" id="search-input" class="search" placeholder="음식 검색 (예: 닭가슴살)" autocomplete="off">
+    <div class="seg" id="search-tabs">
+      <button data-tab="recent" class="active">최근</button>
+      <button data-tab="all">전체</button>
+      <button data-tab="mine">내 음식</button>
+    </div>
+    <div class="food-list" id="food-list"></div>
+    <button class="btn wide" id="custom-btn">＋ 직접 입력하기</button>
+  </div>
+
+  <!-- 양 선택 시트 -->
+  <div class="sheet" id="amount-sheet" hidden>
+    <div class="sheet-head">
+      <button class="icon-btn" data-close aria-label="닫기">✕</button>
+      <h2 id="amount-title"></h2>
+      <span></span>
+    </div>
+    <p class="muted center" id="amount-unit"></p>
+    <div class="chips" id="serving-chips"></div>
+    <label class="field big"><span>양 (g)</span><input type="number" inputmode="decimal" id="amount-g"></label>
+    <div class="preview" id="amount-preview"></div>
+    <div class="seg" id="meal-select"></div>
+    <button class="btn primary wide" id="amount-save">추가</button>
+    <button class="btn danger wide" id="amount-delete" hidden>삭제</button>
+  </div>
+
+  <!-- 직접 입력 시트 -->
+  <div class="sheet" id="custom-sheet" hidden>
+    <div class="sheet-head">
+      <button class="icon-btn" data-close aria-label="닫기">✕</button>
+      <h2>직접 입력</h2>
+      <span></span>
+    </div>
+    <p class="muted small">식품 포장지 영양성분표를 보고 입력하세요.</p>
+    <label class="field"><span>이름</span><input id="cf-name" placeholder="예: 편의점 닭가슴살 샐러드"></label>
+    <label class="field"><span>단위 이름</span><input id="cf-unit" placeholder="예: 1팩"></label>
+    <label class="field"><span>1회 제공량 (g)</span><input type="number" inputmode="decimal" id="cf-g" value="100"></label>
+    <label class="field"><span>탄수화물 (g)</span><input type="number" inputmode="decimal" id="cf-c"></label>
+    <label class="field"><span>단백질 (g)</span><input type="number" inputmode="decimal" id="cf-p"></label>
+    <label class="field"><span>지방 (g)</span><input type="number" inputmode="decimal" id="cf-f"></label>
+    <label class="field"><span>칼로리 (kcal)</span><input type="number" inputmode="decimal" id="cf-k" placeholder="비우면 자동 계산"></label>
+    <label class="switch-row"><span>내 음식에 저장</span><input type="checkbox" id="cf-save" checked></label>
+    <button class="btn primary wide" id="cf-submit">다음</button>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="foods.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

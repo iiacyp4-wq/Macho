@@ -1,0 +1,415 @@
+'use strict';
+
+const STORE_KEY = 'macho:v1';
+const MEALS = [
+  { id: 'breakfast', name: '아침' },
+  { id: 'lunch', name: '점심' },
+  { id: 'dinner', name: '저녁' },
+  { id: 'snack', name: '간식' },
+];
+const MACROS = [
+  { id: 'c', name: '탄수화물', short: '탄' },
+  { id: 'p', name: '단백질', short: '단' },
+  { id: 'f', name: '지방', short: '지' },
+];
+
+// ---------- 저장소 ----------
+function defaultState() {
+  return {
+    goals: { c: 250, p: 120, f: 60 },
+    customFoods: [],
+    log: {},        // { 'YYYY-MM-DD': [entry] }
+    recent: [],     // food 객체 스냅샷 (최근 사용 순)
+    notify: false,
+  };
+}
+function load() {
+  try {
+    const s = JSON.parse(localStorage.getItem(STORE_KEY));
+    return s ? { ...defaultState(), ...s } : defaultState();
+  } catch { return defaultState(); }
+}
+let state = load();
+function save() {
+  localStorage.setItem(STORE_KEY, JSON.stringify(state));
+  updateNotification();
+}
+
+// ---------- 유틸 ----------
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => [...document.querySelectorAll(sel)];
+const r0 = (n) => Math.round(n);
+const r1 = (n) => Math.round(n * 10) / 10;
+const kcalOf = (m) => m.c * 4 + m.p * 4 + m.f * 9;
+const goalKcal = () => r0(kcalOf(state.goals));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+const esc = (s) => String(s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+
+function dateKey(d) {
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function keyToDate(k) { const [y, m, d] = k.split('-').map(Number); return new Date(y, m - 1, d); }
+function addDays(k, n) { const d = keyToDate(k); d.setDate(d.getDate() + n); return dateKey(d); }
+const todayKey = () => dateKey(new Date());
+function labelFor(k) {
+  const t = todayKey();
+  if (k === t) return '오늘';
+  if (k === addDays(t, -1)) return '어제';
+  if (k === addDays(t, 1)) return '내일';
+  const d = keyToDate(k);
+  return `${d.getMonth() + 1}월 ${d.getDate()}일 (${'일월화수목금토'[d.getDay()]})`;
+}
+
+// 음식(1회 제공량 기준) × 그램 → 영양소
+function scale(food, grams) {
+  const r = grams / food.g;
+  return { k: food.k * r, c: food.c * r, p: food.p * r, f: food.f * r };
+}
+function totalsFor(k) {
+  const t = { k: 0, c: 0, p: 0, f: 0 };
+  for (const e of state.log[k] || []) {
+    const v = scale(e.food, e.grams);
+    t.k += v.k; t.c += v.c; t.p += v.p; t.f += v.f;
+  }
+  return t;
+}
+
+function toast(msg) {
+  const el = $('#toast');
+  el.textContent = msg; el.hidden = false;
+  clearTimeout(toast.t); toast.t = setTimeout(() => (el.hidden = true), 1800);
+}
+
+// ---------- 오늘 화면 ----------
+let currentDay = todayKey();
+const RING_LEN = 2 * Math.PI * 52;
+
+function renderToday() {
+  $('#date-label').textContent = labelFor(currentDay);
+  const t = totalsFor(currentDay);
+  const goal = goalKcal();
+  const left = goal - t.k;
+
+  $('#kcal-left').textContent = Math.abs(r0(left)).toLocaleString();
+  $('#kcal-left-label').textContent = left >= 0 ? 'kcal 남음' : 'kcal 초과';
+  $('#kcal-eaten').textContent = r0(t.k).toLocaleString();
+  $('#kcal-goal').textContent = goal.toLocaleString();
+  const ring = $('#ring-fg');
+  ring.style.strokeDasharray = RING_LEN;
+  ring.style.strokeDashoffset = RING_LEN * (1 - Math.min(t.k / (goal || 1), 1));
+  ring.classList.toggle('over', left < 0);
+
+  for (const m of MACROS) {
+    const el = $(`.macro[data-m="${m.id}"]`);
+    const g = state.goals[m.id] || 0;
+    el.querySelector('.mv').textContent = `${r0(t[m.id])} / ${r0(g)}g`;
+    el.querySelector('.bar i').style.width = `${Math.min((t[m.id] / (g || 1)) * 100, 100)}%`;
+    el.classList.toggle('over', t[m.id] > g * 1.05);
+  }
+
+  const entries = state.log[currentDay] || [];
+  $('#meals').innerHTML = MEALS.map((meal) => {
+    const items = entries.filter((e) => e.meal === meal.id);
+    const kcal = items.reduce((s, e) => s + scale(e.food, e.grams).k, 0);
+    return `<section class="card">
+      <div class="meal-head">
+        <div><h2>${meal.name}</h2><span class="meal-kcal">${r0(kcal)} kcal</span></div>
+        <button class="add-btn" data-add="${meal.id}" aria-label="${meal.name} 추가">＋</button>
+      </div>
+      ${items.map((e) => {
+        const v = scale(e.food, e.grams);
+        return `<div class="entry" data-entry="${e.id}">
+          <div><div class="entry-name">${esc(e.food.n)}</div>
+          <div class="entry-sub">${r0(e.grams)}g · 탄 ${r1(v.c)} · 단 ${r1(v.p)} · 지 ${r1(v.f)}</div></div>
+          <div class="entry-kcal">${r0(v.k)} kcal</div></div>`;
+      }).join('')}
+    </section>`;
+  }).join('');
+}
+
+$('#prev-day').onclick = () => { currentDay = addDays(currentDay, -1); renderToday(); };
+$('#next-day').onclick = () => { currentDay = addDays(currentDay, 1); renderToday(); };
+$('#date-label').onclick = () => { currentDay = todayKey(); renderToday(); };
+$('#meals').onclick = (ev) => {
+  const add = ev.target.closest('[data-add]');
+  if (add) return openSearch(add.dataset.add);
+  const ent = ev.target.closest('[data-entry]');
+  if (ent) {
+    const e = (state.log[currentDay] || []).find((x) => x.id === ent.dataset.entry);
+    if (e) openAmount(e.food, e.meal, e);
+  }
+};
+
+// ---------- 시트 공통 ----------
+function openSheet(id) { $$('.sheet').forEach((s) => (s.hidden = s.id !== id)); }
+function closeSheets() { $$('.sheet').forEach((s) => (s.hidden = true)); }
+$$('[data-close]').forEach((b) => (b.onclick = closeSheets));
+
+// ---------- 검색 ----------
+let pendingMeal = 'breakfast';
+let searchTab = 'recent';
+
+function openSearch(meal) {
+  pendingMeal = meal;
+  $('#search-title').textContent = `${MEALS.find((m) => m.id === meal).name}에 추가`;
+  $('#search-input').value = '';
+  setSearchTab(state.recent.length ? 'recent' : 'all');
+  openSheet('search-sheet');
+}
+function setSearchTab(tab) {
+  searchTab = tab;
+  $$('#search-tabs button').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
+  renderFoodList();
+}
+function foodPool() {
+  const q = $('#search-input').value.trim().replace(/\s/g, '');
+  if (q) {
+    // 검색어가 있으면 전체에서 찾기
+    const all = [...state.customFoods, ...BASE_FOODS];
+    return all.filter((f) => f.n.replace(/\s/g, '').includes(q));
+  }
+  if (searchTab === 'recent') return state.recent;
+  if (searchTab === 'mine') return state.customFoods;
+  return BASE_FOODS;
+}
+let listedFoods = [];
+function renderFoodList() {
+  listedFoods = foodPool();
+  const emptyMsg = { recent: '아직 기록한 음식이 없어요', mine: '직접 입력한 음식이 여기에 저장돼요', all: '검색 결과가 없어요' }[searchTab];
+  $('#food-list').innerHTML = listedFoods.length
+    ? listedFoods.map((f, i) => `<button class="food-item" data-i="${i}">
+        <div><div class="entry-name">${esc(f.n)}</div>
+        <div class="entry-sub">${esc(f.u || '')} (${r0(f.g)}g) · 탄 ${r1(f.c)} · 단 ${r1(f.p)} · 지 ${r1(f.f)}</div></div>
+        <div class="entry-kcal">${r0(f.k)} kcal</div></button>`).join('')
+    : `<div class="empty">${$('#search-input').value.trim() ? '검색 결과가 없어요. 아래에서 직접 입력해 보세요.' : emptyMsg}</div>`;
+}
+$('#search-input').oninput = renderFoodList;
+$('#search-tabs').onclick = (ev) => { const b = ev.target.closest('button'); if (b) setSearchTab(b.dataset.tab); };
+$('#food-list').onclick = (ev) => {
+  const b = ev.target.closest('[data-i]');
+  if (b) openAmount(listedFoods[+b.dataset.i], pendingMeal);
+};
+
+// ---------- 양 선택 ----------
+let amountCtx = null; // { food, meal, entry }
+
+function openAmount(food, meal, entry = null) {
+  amountCtx = { food, meal, entry };
+  $('#amount-title').textContent = food.n;
+  $('#amount-unit').textContent = `1회 제공량: ${food.u || ''} = ${r0(food.g)}g · ${r0(food.k)} kcal`;
+  $('#amount-g').value = r1(entry ? entry.grams : food.g);
+  $('#serving-chips').innerHTML = [0.5, 1, 1.5, 2, 3].map((x) => `<button data-x="${x}">${esc(food.u || '1회')}${x === 1 ? '' : ' ×' + x}</button>`).join('');
+  $('#meal-select').innerHTML = MEALS.map((m) => `<button data-meal="${m.id}" class="${m.id === meal ? 'active' : ''}">${m.name}</button>`).join('');
+  $('#amount-save').textContent = entry ? '수정' : '추가';
+  $('#amount-delete').hidden = !entry;
+  updateAmountPreview();
+  openSheet('amount-sheet');
+}
+function updateAmountPreview() {
+  const g = parseFloat($('#amount-g').value) || 0;
+  const v = scale(amountCtx.food, g);
+  $('#amount-preview').innerHTML = `
+    <div><b>${r0(v.k)}</b><span>kcal</span></div>
+    <div><b style="color:var(--c)">${r1(v.c)}</b><span>탄수화물</span></div>
+    <div><b style="color:var(--p)">${r1(v.p)}</b><span>단백질</span></div>
+    <div><b style="color:var(--f)">${r1(v.f)}</b><span>지방</span></div>`;
+  const x = g / amountCtx.food.g;
+  $$('#serving-chips button').forEach((b) => b.classList.toggle('active', Math.abs(+b.dataset.x - x) < 0.001));
+}
+$('#amount-g').oninput = updateAmountPreview;
+$('#serving-chips').onclick = (ev) => {
+  const b = ev.target.closest('[data-x]');
+  if (!b) return;
+  $('#amount-g').value = r1(amountCtx.food.g * +b.dataset.x);
+  updateAmountPreview();
+};
+$('#meal-select').onclick = (ev) => {
+  const b = ev.target.closest('[data-meal]');
+  if (!b) return;
+  amountCtx.meal = b.dataset.meal;
+  $$('#meal-select button').forEach((x) => x.classList.toggle('active', x === b));
+};
+$('#amount-save').onclick = () => {
+  const grams = parseFloat($('#amount-g').value);
+  if (!(grams > 0)) return toast('양을 입력해 주세요');
+  const { food, meal, entry } = amountCtx;
+  if (entry) {
+    entry.grams = grams; entry.meal = meal;
+  } else {
+    (state.log[currentDay] ||= []).push({ id: uid(), meal, grams, food: { ...food } });
+    state.recent = [{ ...food }, ...state.recent.filter((f) => f.n !== food.n)].slice(0, 30);
+  }
+  save(); closeSheets(); renderToday();
+  toast(entry ? '수정했어요' : `${food.n} 추가!`);
+};
+$('#amount-delete').onclick = () => {
+  const { entry } = amountCtx;
+  state.log[currentDay] = (state.log[currentDay] || []).filter((e) => e.id !== entry.id);
+  save(); closeSheets(); renderToday(); toast('삭제했어요');
+};
+
+// ---------- 직접 입력 ----------
+$('#custom-btn').onclick = () => {
+  $('#cf-name').value = $('#search-input').value.trim();
+  ['#cf-unit', '#cf-c', '#cf-p', '#cf-f', '#cf-k'].forEach((s) => ($(s).value = ''));
+  $('#cf-g').value = 100;
+  openSheet('custom-sheet');
+};
+$('#cf-submit').onclick = () => {
+  const name = $('#cf-name').value.trim();
+  if (!name) return toast('이름을 입력해 주세요');
+  const num = (s) => parseFloat($(s).value) || 0;
+  const food = { n: name, u: $('#cf-unit').value.trim() || '1회', g: num('#cf-g') || 100, c: num('#cf-c'), p: num('#cf-p'), f: num('#cf-f') };
+  food.k = $('#cf-k').value ? num('#cf-k') : r0(kcalOf(food));
+  if ($('#cf-save').checked) {
+    state.customFoods = [food, ...state.customFoods.filter((f) => f.n !== name)];
+    save();
+  }
+  openAmount(food, pendingMeal);
+};
+
+// ---------- 기록 ----------
+function renderHistory() {
+  const t = todayKey();
+  const goal = goalKcal();
+  const days = Array.from({ length: 7 }, (_, i) => addDays(t, i - 6));
+  const totals = days.map(totalsFor);
+  const max = Math.max(goal * 1.2, ...totals.map((x) => x.k)) || 1;
+  const logged = totals.filter((x) => x.k > 0);
+  const avg = (key) => (logged.length ? logged.reduce((s, x) => s + x[key], 0) / logged.length : 0);
+
+  $('#history').innerHTML = days.map((k, i) => {
+    const x = totals[i];
+    const seg = (key, mult) => `<i style="width:${((x[key] * mult) / max) * 100}%;background:var(--${key})"></i>`;
+    const d = keyToDate(k);
+    return `<div class="hist-row">
+      <span>${d.getMonth() + 1}/${d.getDate()} ${'일월화수목금토'[d.getDay()]}</span>
+      <div class="hist-bar">${seg('c', 4)}${seg('p', 4)}${seg('f', 9)}<span class="hist-goal" style="left:${(goal / max) * 100}%"></span></div>
+      <span class="hist-kcal">${r0(x.k)}</span></div>`;
+  }).join('') + `
+    <div class="legend"><span style="--dot:var(--c)">탄수화물</span><span style="--dot:var(--p)">단백질</span><span style="--dot:var(--f)">지방</span><span>│ 세로선 = 목표</span></div>
+    <div class="avg">기록한 날 평균 (${logged.length}일)<br>
+      <b>${r0(avg('k'))} kcal</b> · 탄 ${r0(avg('c'))}g · 단 ${r0(avg('p'))}g · 지 ${r0(avg('f'))}g</div>`;
+}
+
+// ---------- 설정 ----------
+function renderSettings() {
+  for (const m of MACROS) $(`#goal-${m.id}`).value = state.goals[m.id];
+  updateGoalCalc();
+  $('#notify-toggle').checked = state.notify && notifPermission() === 'granted';
+  renderNotifyStatus();
+  $('#custom-list').innerHTML = state.customFoods.length
+    ? state.customFoods.map((f, i) => `<div class="entry"><div><div class="entry-name">${esc(f.n)}</div>
+        <div class="entry-sub">${esc(f.u)} (${r0(f.g)}g) · ${r0(f.k)} kcal</div></div>
+        <button class="del-x" data-del="${i}">삭제</button></div>`).join('')
+    : '<p class="muted small">아직 없어요. 음식 추가 → "직접 입력하기"로 만들 수 있어요.</p>';
+}
+function updateGoalCalc() {
+  const g = Object.fromEntries(MACROS.map((m) => [m.id, parseFloat($(`#goal-${m.id}`).value) || 0]));
+  $('#goal-kcal-calc').textContent = r0(kcalOf(g)).toLocaleString();
+}
+MACROS.forEach((m) => ($(`#goal-${m.id}`).oninput = updateGoalCalc));
+$('#save-goals').onclick = () => {
+  for (const m of MACROS) state.goals[m.id] = parseFloat($(`#goal-${m.id}`).value) || 0;
+  save(); toast('목표를 저장했어요');
+};
+$('#custom-list').onclick = (ev) => {
+  const b = ev.target.closest('[data-del]');
+  if (!b) return;
+  const f = state.customFoods[+b.dataset.del];
+  if (!confirm(`"${f.n}"을(를) 내 음식에서 지울까요? (이미 기록한 건 그대로 남아요)`)) return;
+  state.customFoods.splice(+b.dataset.del, 1);
+  save(); renderSettings();
+};
+
+$('#export-btn').onclick = () => {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `macho-backup-${todayKey()}.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+};
+$('#import-file').onchange = async (ev) => {
+  const file = ev.target.files[0];
+  if (!file) return;
+  try {
+    const data = JSON.parse(await file.text());
+    if (!data || typeof data.log !== 'object') throw new Error();
+    if (!confirm('지금 기록을 백업 파일 내용으로 바꿀까요?')) return;
+    state = { ...defaultState(), ...data };
+    save(); renderSettings(); toast('불러왔어요');
+  } catch { toast('백업 파일을 읽을 수 없어요'); }
+  ev.target.value = '';
+};
+
+// ---------- 잠금화면 알림 ----------
+const notifPermission = () => ('Notification' in window ? Notification.permission : 'unsupported');
+
+function renderNotifyStatus() {
+  const p = notifPermission();
+  const msg = {
+    unsupported: '이 브라우저는 알림을 지원하지 않아요. (아이폰은 공유 → "홈 화면에 추가" 후 그 아이콘으로 열어야 해요)',
+    denied: '알림이 차단돼 있어요. 휴대폰 설정 → 앱/사이트 알림에서 허용해 주세요.',
+    default: '',
+    granted: state.notify ? '켜짐 · 기록할 때마다 알림이 갱신돼요.' : '',
+  }[p];
+  $('#notify-status').textContent = msg;
+}
+$('#notify-toggle').onchange = async (ev) => {
+  if (ev.target.checked) {
+    if (notifPermission() === 'unsupported') { ev.target.checked = false; return renderNotifyStatus(); }
+    const p = await Notification.requestPermission();
+    state.notify = p === 'granted';
+    ev.target.checked = state.notify;
+  } else {
+    state.notify = false;
+    const reg = await navigator.serviceWorker?.getRegistration();
+    (await reg?.getNotifications({ tag: 'macho-today' }))?.forEach((n) => n.close());
+  }
+  save(); renderNotifyStatus();
+};
+
+async function updateNotification() {
+  if (!state.notify || notifPermission() !== 'granted' || !('serviceWorker' in navigator)) return;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const t = totalsFor(todayKey());
+    const g = state.goals;
+    const left = goalKcal() - t.k;
+    await reg.showNotification(`🔥 ${r0(t.k)} / ${goalKcal()} kcal  (${left >= 0 ? r0(left) + ' 남음' : r0(-left) + ' 초과'})`, {
+      body: `탄 ${r0(t.c)}/${r0(g.c)}g · 단 ${r0(t.p)}/${r0(g.p)}g · 지 ${r0(t.f)}/${r0(g.f)}g`,
+      tag: 'macho-today',
+      renotify: false,
+      silent: true,
+      requireInteraction: true,
+      icon: 'icons/icon-192.png',
+      badge: 'icons/icon-192.png',
+    });
+  } catch (e) { console.warn('알림 실패', e); }
+}
+
+// ---------- 탭 ----------
+function showView(name) {
+  $$('.view').forEach((v) => v.classList.toggle('active', v.id === `view-${name}`));
+  $$('.tabbar button').forEach((b) => b.classList.toggle('active', b.dataset.view === name));
+  if (name === 'today') renderToday();
+  if (name === 'history') renderHistory();
+  if (name === 'settings') renderSettings();
+  window.scrollTo(0, 0);
+}
+$('.tabbar').onclick = (ev) => { const b = ev.target.closest('[data-view]'); if (b) showView(b.dataset.view); };
+
+// 앱으로 돌아올 때 날짜가 바뀌었으면 오늘로 이동 + 알림 갱신
+let lastToday = todayKey();
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  if (todayKey() !== lastToday) { lastToday = todayKey(); currentDay = lastToday; }
+  renderToday(); updateNotification();
+});
+
+// ---------- 시작 ----------
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+renderToday();
+updateNotification();

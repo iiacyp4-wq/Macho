@@ -105,14 +105,14 @@
         <button class="btn" data-copy="MachoBar">탄단지 스크립트 복사<br>(MachoBar)</button>
       </div>
       <a class="btn wide" href="preview.html">위젯 모양 미리보기</a>
-      <label class="switch-row"><span>잠금화면 위젯 사용</span><input type="checkbox" id="widget-toggle"></label>
+      <label class="switch-row"><span>잠금화면 위젯 사용</span><input type="checkbox" switch id="widget-toggle"></label>
       <p class="muted small">위젯 숫자가 바뀌는 시점은 아이폰이 정해서, 반영 후 보통 몇 분 안에 바뀌어요.</p>
     </section>
 
     <section class="card">
       <h2>잠금화면 알림 <span class="tag">실험</span></h2>
       <p class="muted small">오늘 섭취 현황을 알림으로 띄워 잠금화면에서 볼 수 있게 합니다. 기록할 때마다 갱신됩니다. 안드로이드(크롬)에서 가장 잘 동작하고, 아이폰은 홈 화면에 추가한 뒤에만 가능합니다.</p>
-      <label class="switch-row"><span>현황 알림 켜기</span><input type="checkbox" id="notify-toggle"></label>
+      <label class="switch-row"><span>현황 알림 켜기</span><input type="checkbox" switch id="notify-toggle"></label>
       <p class="muted small" id="notify-status"></p>
     </section>
 
@@ -210,13 +210,11 @@
     <label class="field"><span>단백질 (g)</span><input type="number" inputmode="decimal" id="cf-p"></label>
     <label class="field"><span>지방 (g)</span><input type="number" inputmode="decimal" id="cf-f"></label>
     <label class="field"><span>칼로리 (kcal)</span><input type="number" inputmode="decimal" id="cf-k" placeholder="비우면 자동 계산"></label>
-    <label class="switch-row"><span>내 음식에 저장</span><input type="checkbox" id="cf-save" checked></label>
+    <label class="switch-row"><span>내 음식에 저장</span><input type="checkbox" switch id="cf-save" checked></label>
     <button class="btn primary wide" id="cf-submit">다음</button>
   </div>
 
   <div class="toast" id="toast" hidden></div>
-  <!-- 아이폰 햅틱용 숨은 스위치 (iOS 18+는 스위치를 누르면 햅틱이 남) -->
-  <label id="haptic-label" class="haptic" aria-hidden="true"><input type="checkbox" switch tabindex="-1"></label>
 
   <script src="foods.js"></script>
   <script src="app.js"></script>

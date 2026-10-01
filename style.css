@@ -23,7 +23,6 @@
   }
 }
 [hidden] { display: none !important; }
-.haptic { position: fixed; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; left: -10px; top: 0; }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; background: var(--bg); color: var(--text); }
 body {
@@ -171,7 +170,10 @@ h2 { font-size: 16px; margin: 0 0 12px; }
 .row { display: flex; gap: 8px; }
 .row .btn { flex: 1; }
 .switch-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; }
-.switch-row input { width: 22px; height: 22px; accent-color: var(--accent); }
+.switch-row input { accent-color: var(--accent); }
+.switch-row input:not([switch]) { width: 22px; height: 22px; }
+[data-haptic-trigger] { position: absolute; inset: 0; touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+[data-haptic-trigger] input { position: absolute; width: 1px; height: 1px; margin: 0; visibility: hidden; }
 .sheet .switch-row { background: var(--card); padding: 12px 14px; border-radius: 12px; margin-bottom: 8px; }
 .sync-btn { margin: 0 0 12px; text-decoration: none; }
 .sync-btn.pending { background: var(--text); color: var(--card); border-color: var(--text); }

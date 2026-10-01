@@ -1,7 +1,7 @@
 'use strict';
 
 // 고칠 때마다 올리는 버전 (탭바 오른쪽 아래, 설정 맨 아래에 표시)
-const APP_VERSION = 'v1.15';
+const APP_VERSION = 'v1.16';
 
 const STORE_KEY = 'macho:v1';
 const MEALS = [
@@ -791,16 +791,43 @@ document.addEventListener('visibilitychange', () => {
 });
 
 // ---------- 햅틱 ----------
-// 안드로이드: 진동 API / 아이폰(iOS 18+): 숨은 스위치를 대신 눌러 햅틱을 냄
-function haptic() {
-  if (navigator.vibrate) { navigator.vibrate(10); return; }
-  $('#haptic-label').click();
+// 아이폰: 버튼마다 투명한 스위치 덮개를 씌움. 손가락이 실제로 스위치를 누른 것이 되어 iOS가 햅틱을 줌
+// (iOS 26.5부터 스크립트로 대신 누르는 방식은 막힘. 방식 출처: github.com/tijnjh/ios-haptics, MIT)
+// 안드로이드: 진동 API
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const HAPTIC_TARGETS = 'button, [data-entry]';
+function addHaptic(el) {
+  if (el.querySelector(':scope > [data-haptic-trigger]')) return;
+  const label = document.createElement('label');
+  label.setAttribute('data-haptic-trigger', '');
+  label.setAttribute('aria-hidden', 'true');
+  const sw = document.createElement('input');
+  sw.type = 'checkbox';
+  sw.setAttribute('switch', '');
+  sw.tabIndex = -1;
+  sw.addEventListener('click', (e) => e.stopPropagation()); // 버튼 동작이 두 번 실행되지 않게
+  label.append(sw);
+  if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
+  el.append(label);
 }
-document.addEventListener('click', (ev) => {
-  if (ev.target.closest('#haptic-label')) return;
-  if (ev.target.matches('input[type=checkbox]')) return; // 라벨 누를 때 따라오는 두 번째 클릭
-  if (ev.target.closest('button, .btn, [data-entry], .switch-row')) haptic();
-}, true);
+if (IS_IOS) {
+  const scan = (root) => {
+    if (root.nodeType !== 1) return;
+    if (root.matches(HAPTIC_TARGETS)) addHaptic(root);
+    root.querySelectorAll(HAPTIC_TARGETS).forEach(addHaptic);
+  };
+  scan(document.body);
+  new MutationObserver((list) => list.forEach((m) => {
+    m.addedNodes.forEach(scan);
+    // 버튼 글자를 바꾸면(textContent) 덮개가 지워지므로 다시 씌움
+    const host = m.target.nodeType === 1 && m.target.closest(HAPTIC_TARGETS);
+    if (host) addHaptic(host);
+  })).observe(document.body, { childList: true, subtree: true });
+} else if (navigator.vibrate) {
+  document.addEventListener('click', (ev) => {
+    if (ev.target.closest(`${HAPTIC_TARGETS}, .btn, .switch-row`)) navigator.vibrate(10);
+  }, true);
+}
 
 // ---------- 버전 표시 ----------
 $('#app-version').textContent = APP_VERSION;

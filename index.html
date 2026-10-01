@@ -44,6 +44,8 @@
       </div>
     </section>
 
+    <a class="btn wide sync-btn" id="widget-sync" hidden></a>
+
     <div id="meals"></div>
   </main>
 
@@ -61,6 +63,19 @@
       <label class="field"><span>지방 (g)</span><input type="number" inputmode="decimal" id="goal-f"></label>
       <p class="muted small">칼로리 목표 = 탄×4 + 단×4 + 지×9 = <b id="goal-kcal-calc">0</b> kcal</p>
       <button class="btn primary" id="save-goals">목표 저장</button>
+    </section>
+
+    <section class="card">
+      <h2>아이폰 잠금화면 위젯</h2>
+      <ol class="steps small">
+        <li>앱스토어에서 무료 앱 <b>Scriptable</b>을 설치해요.</li>
+        <li>아래 <b>스크립트 복사</b>를 누르고, Scriptable을 열어 <b>＋</b> → 붙여넣기 → 맨 위 제목을 눌러 이름을 <b>Macho</b>로 바꾸고 <b>Done</b>.</li>
+        <li>잠금화면을 길게 누르기 → <b>사용자화</b> → 잠금화면 → 시계 아래 위젯 칸 → <b>Scriptable</b> → 직사각형(또는 원형) 추가 → 추가된 위젯을 눌러 Script를 <b>Macho</b>로 선택.</li>
+        <li>아래 스위치를 켜면 오늘 화면에 <b>잠금화면에 반영</b> 버튼이 생겨요. 누르면 Scriptable이 잠깐 열렸다가 숫자를 저장해요. 왼쪽 위 <b>◀ Macho</b>를 눌러 돌아오면 돼요.</li>
+      </ol>
+      <button class="btn wide" id="copy-script">스크립트 복사</button>
+      <label class="switch-row"><span>잠금화면 위젯 사용</span><input type="checkbox" id="widget-toggle"></label>
+      <p class="muted small">위젯 숫자가 바뀌는 시점은 아이폰이 정해서, 반영 후 보통 몇 분 안에 바뀌어요.</p>
     </section>
 
     <section class="card">

@@ -21,6 +21,8 @@ function defaultState() {
     log: {},        // { 'YYYY-MM-DD': [entry] }
     recent: [],     // food 객체 스냅샷 (최근 사용 순)
     notify: false,
+    widget: false,   // 아이폰 Scriptable 잠금화면 위젯 사용
+    widgetSent: '', // 마지막으로 위젯에 보낸 값
   };
 }
 function load() {
@@ -107,6 +109,8 @@ function renderToday() {
     el.querySelector('.bar i').style.width = `${Math.min((t[m.id] / (g || 1)) * 100, 100)}%`;
     el.classList.toggle('over', t[m.id] > g * 1.05);
   }
+
+  renderWidgetButton();
 
   const entries = state.log[currentDay] || [];
   $('#meals').innerHTML = MEALS.map((meal) => {
@@ -297,6 +301,8 @@ function renderHistory() {
 function renderSettings() {
   for (const m of MACROS) $(`#goal-${m.id}`).value = state.goals[m.id];
   updateGoalCalc();
+  $('#widget-toggle').checked = state.widget;
+  prefetchScript();
   $('#notify-toggle').checked = state.notify && notifPermission() === 'granted';
   renderNotifyStatus();
   $('#custom-list').innerHTML = state.customFoods.length
@@ -389,6 +395,44 @@ async function updateNotification() {
     });
   } catch (e) { console.warn('알림 실패', e); }
 }
+
+// ---------- 아이폰 잠금화면 위젯 (Scriptable) ----------
+function widgetQuery() {
+  const t = totalsFor(todayKey()), g = state.goals;
+  return new URLSearchParams({
+    d: todayKey(), k: r0(t.k), c: r0(t.c), p: r0(t.p), f: r0(t.f),
+    gc: r0(g.c), gp: r0(g.p), gf: r0(g.f),
+  }).toString();
+}
+function renderWidgetButton() {
+  const btn = $('#widget-sync');
+  btn.hidden = !state.widget;
+  if (!state.widget) return;
+  const q = widgetQuery();
+  const done = q === state.widgetSent;
+  btn.href = `scriptable:///run/Macho?${q}`;
+  btn.textContent = done ? '✓ 잠금화면에 반영됨' : '🔒 잠금화면에 반영';
+  btn.classList.toggle('pending', !done);
+  btn.classList.toggle('done', done);
+}
+$('#widget-sync').onclick = () => {
+  state.widgetSent = widgetQuery();
+  save();
+  setTimeout(renderWidgetButton, 300);
+};
+$('#widget-toggle').onchange = (ev) => { state.widget = ev.target.checked; save(); };
+
+let scriptText = '';
+function prefetchScript() {
+  if (!scriptText) fetch('scriptable/Macho.js').then((r) => r.text()).then((t) => (scriptText = t)).catch(() => {});
+}
+$('#copy-script').onclick = async () => {
+  try {
+    if (!scriptText) scriptText = await (await fetch('scriptable/Macho.js')).text();
+    await navigator.clipboard.writeText(scriptText);
+    toast('복사했어요! Scriptable에 붙여넣으세요');
+  } catch { toast('복사 실패. 한 번 더 눌러 주세요'); }
+};
 
 // ---------- 탭 ----------
 function showView(name) {

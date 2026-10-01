@@ -136,6 +136,11 @@ h2 { font-size: 16px; margin: 0 0 12px; }
 .switch-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; }
 .switch-row input { width: 22px; height: 22px; accent-color: var(--accent); }
 .sheet .switch-row { background: var(--card); padding: 12px 14px; border-radius: 12px; margin-bottom: 8px; }
+.sync-btn { margin: 0 0 12px; text-decoration: none; }
+.sync-btn.pending { background: var(--text); color: var(--card); border-color: var(--text); }
+.sync-btn.done { color: var(--muted); }
+.steps { padding-left: 20px; margin: 0 0 12px; }
+.steps li { margin-bottom: 6px; }
 .del-x { border: 0; background: none; color: var(--danger); font-size: 14px; padding: 6px; }
 
 .toast { position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: #111827; color: #fff; padding: 10px 16px; border-radius: 999px; font-size: 14px; z-index: 20; white-space: nowrap; }

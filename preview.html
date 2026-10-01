@@ -74,6 +74,7 @@ figcaption code { font-family: var(--ui); background: var(--panel); border: 1px 
 .hs { display: flex; align-items: flex-end; gap: 4px; }
 .cols { display: flex; gap: 6px; }
 .col { display: grid; gap: 3px; }
+.ctr text { font-family: var(--ui); font-variant-numeric: tabular-nums; }
 .mrow { display: flex; align-items: center; gap: 6px; }
 .note { color: var(--muted); font-size: 13px; line-height: 1.55; margin: 0; }
 </style>
@@ -154,7 +155,14 @@ function ring(v, size, lw) {
 // Macho.js: 왼쪽 링 + 오른쪽 끼니별 칼로리
 const kcalWidget = (v) => `<div class="w rect"><div style="display:flex;align-items:center;gap:8px">
   <div style="position:relative;width:66px;height:66px;flex:none">${ring(v, 66, 7)}
-    <div style="position:absolute;inset:0;display:grid;place-content:center;text-align:center;line-height:1.05">${T('big', 16, Math.round(v.k))}${T('sm', 9, '/' + Math.round(v.gk))}<span>${T('sm', 11, '🔥')}${T('big', 13, v.st)}</span></div></div>
+    <svg class="ctr" viewBox="0 0 66 66" width="66" height="66" style="position:absolute;inset:0" aria-hidden="true">
+      <!-- Macho.js drawCenter와 같은 위치 (SF 글꼴 기준 바닥선: 16pt→26.2, 9pt→37.6, 13pt→49.9) -->
+      <text x="33" y="26.2" text-anchor="middle" fill="#fff" font-size="16" font-weight="700">${Math.round(v.k)}</text>
+      <text x="33" y="37.6" text-anchor="middle" fill="#fff" font-size="9" font-weight="600">/${Math.round(v.gk)}</text>
+      ${(() => { const nw = String(v.st).length * 8, left = (66 - (11 + 1.5 + nw)) / 2;
+        return `<path fill="#fff" transform="translate(${left} 41) scale(11)" d="M.5 0C.55.2.8.3.85.55C.9.8.72 1 .5 1C.28 1 .1.82.12.6C.13.45.22.38.3.3C.3.42.36.5.42.52C.38.35.42.15.5 0Z"/>
+        <text x="${left + 12.5}" y="49.9" fill="#fff" font-size="13" font-weight="700">${v.st}</text>`; })()}
+    </svg></div>
   <div style="display:grid;gap:1px;width:82px;flex:none">${MEALS.map(([name, k, a]) => `<div style="display:flex;align-items:center;gap:4px">
     <span style="width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,${a});flex:none"></span>${T('sm', 12, name)}<span style="flex:1"></span>${T('big', 13, Math.round(v[k]))}</div>`).join('')}</div>
 </div></div>`;

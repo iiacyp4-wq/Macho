@@ -3,7 +3,7 @@
 // icon-color: deep-green; icon-glyph: utensils;
 
 // Macho 칼로리 위젯 (원형)
-// 버전: v1.20
+// 버전: v1.21
 // 이 스크립트 이름을 반드시 "Macho" 로 저장하세요. (Macho 앱의 반영 버튼이 이 이름을 부르고,
 // 받은 숫자를 저장해서 MachoBar 위젯도 같이 씁니다)
 
@@ -42,7 +42,7 @@ function read() {
 
 // ---------- 그림 ----------
 // 끼니별로 나눠진 링: 각 조각 길이 = 그 끼니 칼로리 / 목표 칼로리
-function mealRing(v, size, lw) {
+function mealRing(v, size, lw, center = false) {
   const ctx = new DrawContext();
   ctx.size = new Size(size, size); ctx.opaque = false; ctx.respectScreenScale = true;
   const c = size / 2, r = size / 2 - lw / 2;
@@ -70,7 +70,50 @@ function mealRing(v, size, lw) {
     }
     at = to;
   }
+  if (center) drawCenter(ctx, v, size);
   return ctx.getImage();
+}
+
+// 불꽃 모양 (흰색으로 직접 그림)
+function drawFlame(ctx, x, y, s) {
+  const P = (px, py) => new Point(x + px * s, y + py * s);
+  const p = new Path();
+  p.move(P(0.5, 0));
+  p.addCurve(P(0.85, 0.55), P(0.55, 0.2), P(0.8, 0.3));
+  p.addCurve(P(0.5, 1), P(0.9, 0.8), P(0.72, 1));
+  p.addCurve(P(0.12, 0.6), P(0.28, 1), P(0.1, 0.82));
+  p.addCurve(P(0.3, 0.3), P(0.13, 0.45), P(0.22, 0.38));
+  p.addCurve(P(0.42, 0.52), P(0.3, 0.42), P(0.36, 0.5));
+  p.addCurve(P(0.5, 0), P(0.38, 0.35), P(0.42, 0.15));
+  p.closeSubpath();
+  ctx.addPath(p);
+  ctx.setFillColor(Color.white());
+  ctx.fillPath();
+}
+
+// 링 가운데: 섭취 kcal / 목표 / 불꽃 + 연속 일수 — 위치를 직접 정해서 줄 사이를 좁게
+function drawCenter(ctx, v, size) {
+  const font = (sz, bold) => bold
+    ? (Font.boldRoundedSystemFont ? Font.boldRoundedSystemFont(sz) : Font.boldSystemFont(sz))
+    : Font.semiboldSystemFont(sz);
+  const line = (str, y, h, sz, bold) => {
+    ctx.setFont(font(sz, bold));
+    ctx.setTextColor(Color.white());
+    ctx.setTextAlignedCenter();
+    ctx.drawTextInRect(str, new Rect(0, y, size, h));
+  };
+  line(String(Math.round(v.k)), 11, 20, 16, true);
+  line(`/${Math.round(v.gk)}`, 29, 12, 9, false);
+  // 불꽃 + 숫자를 한 덩어리로 가운데 정렬 (숫자 폭은 글자 수로 어림)
+  const num = String(v.st);
+  const numW = num.length * 8;
+  const flameW = 11, gap = 1.5;
+  const left = (size - (flameW + gap + numW)) / 2;
+  drawFlame(ctx, left, 41, flameW);
+  ctx.setFont(font(13, true));
+  ctx.setTextColor(Color.white());
+  ctx.setTextAlignedLeft();
+  ctx.drawTextInRect(num, new Rect(left + flameW + gap, 37.5, numW + 6, 17));
 }
 
 function dot(alpha) {
@@ -108,23 +151,7 @@ function rectWidget(v) {
 
   const ringBox = row.addStack();
   ringBox.size = new Size(66, 66);
-  ringBox.backgroundImage = mealRing(v, 66, 7);
-  ringBox.layoutVertically();
-  ringBox.centerAlignContent();
-  ringBox.addSpacer();
-  centered(ringBox, String(Math.round(v.k)), 16, true);
-  centered(ringBox, `/${Math.round(v.gk)}`, 9, false);
-  // 연속 기록 일수 (불꽃) — 위 줄에 바로 붙임
-  const streak = ringBox.addStack();
-  streak.centerAlignContent();
-  streak.addSpacer();
-  const flame = streak.addImage(SFSymbol.named('flame.fill').image);
-  flame.imageSize = new Size(12, 12);
-  flame.tintColor = Color.white();
-  streak.addSpacer(1);
-  text(streak, String(v.st), 13, true);
-  streak.addSpacer();
-  ringBox.addSpacer();
+  ringBox.backgroundImage = mealRing(v, 66, 7, true); // 가운데 글자까지 그림
 
   row.addSpacer(8);
   const list = row.addStack();

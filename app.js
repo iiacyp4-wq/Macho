@@ -1,7 +1,7 @@
 'use strict';
 
 // 고칠 때마다 올리는 버전 (탭바 오른쪽 아래, 설정 맨 아래에 표시)
-const APP_VERSION = 'v1.10';
+const APP_VERSION = 'v1.11';
 
 const STORE_KEY = 'macho:v1';
 const MEALS = [

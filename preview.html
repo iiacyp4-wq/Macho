@@ -159,7 +159,7 @@ const kcalWidget = (v) => `<div class="w rect"><div style="display:flex;align-it
 
 // MachoBar.js: 세 칸 + 막대
 const barWidget = (v) => `<div class="w rect"><div class="cols">${MAC.map(([l, k]) => `<div class="col" style="gap:0;width:48px;flex:none">
-  ${bar(pct(v[k], v.goals[k]), 46, 6)}<div style="height:3px"></div>${T('big', 22, Math.round(v[k]))}${T('sm', 11, '/' + Math.round(v.goals[k]) + 'g')}${T('sm', 11, l)}
+  ${T('sm', 12, l)}<div style="height:2px"></div>${bar(pct(v[k], v.goals[k]), 46, 6)}<div style="height:2px"></div>${T('big', 22, Math.round(v[k]))}${T('sm', 11, '/' + Math.round(v.goals[k]) + 'g')}
 </div>`).join('')}</div></div>`;
 
 const phone = (v, widgets, title, how) => `<figure>

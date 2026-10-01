@@ -154,7 +154,7 @@ function ring(v, size, lw) {
 // Macho.js: 왼쪽 링 + 오른쪽 끼니별 칼로리
 const kcalWidget = (v) => `<div class="w rect"><div style="display:flex;align-items:center;gap:8px">
   <div style="position:relative;width:66px;height:66px;flex:none">${ring(v, 66, 7)}
-    <div style="position:absolute;inset:0;display:grid;place-content:center;text-align:center;line-height:1.05">${T('big', 16, Math.round(v.k))}${T('sm', 9, '/' + Math.round(v.gk))}<span>${T('sm', 8, '🔥')}${T('big', 10, v.st)}</span></div></div>
+    <div style="position:absolute;inset:0;display:grid;place-content:center;text-align:center;line-height:1.05">${T('big', 16, Math.round(v.k))}${T('sm', 9, '/' + Math.round(v.gk))}<span>${T('sm', 11, '🔥')}${T('big', 13, v.st)}</span></div></div>
   <div style="display:grid;gap:1px;width:82px;flex:none">${MEALS.map(([name, k, a]) => `<div style="display:flex;align-items:center;gap:4px">
     <span style="width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,${a});flex:none"></span>${T('sm', 12, name)}<span style="flex:1"></span>${T('big', 13, Math.round(v[k]))}</div>`).join('')}</div>
 </div></div>`;

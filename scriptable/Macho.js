@@ -3,7 +3,7 @@
 // icon-color: deep-green; icon-glyph: utensils;
 
 // Macho 칼로리 위젯 (원형)
-// 버전: v1.19
+// 버전: v1.20
 // 이 스크립트 이름을 반드시 "Macho" 로 저장하세요. (Macho 앱의 반영 버튼이 이 이름을 부르고,
 // 받은 숫자를 저장해서 MachoBar 위젯도 같이 씁니다)
 
@@ -114,16 +114,15 @@ function rectWidget(v) {
   ringBox.addSpacer();
   centered(ringBox, String(Math.round(v.k)), 16, true);
   centered(ringBox, `/${Math.round(v.gk)}`, 9, false);
-  // 연속 기록 일수 (불꽃)
-  ringBox.addSpacer(1);
+  // 연속 기록 일수 (불꽃) — 위 줄에 바로 붙임
   const streak = ringBox.addStack();
   streak.centerAlignContent();
   streak.addSpacer();
   const flame = streak.addImage(SFSymbol.named('flame.fill').image);
-  flame.imageSize = new Size(9, 9);
+  flame.imageSize = new Size(12, 12);
   flame.tintColor = Color.white();
   streak.addSpacer(1);
-  text(streak, String(v.st), 10, true);
+  text(streak, String(v.st), 13, true);
   streak.addSpacer();
   ringBox.addSpacer();
 

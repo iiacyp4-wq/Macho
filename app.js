@@ -1,7 +1,7 @@
 'use strict';
 
 // 고칠 때마다 올리는 버전 (탭바 오른쪽 아래, 설정 맨 아래에 표시)
-const APP_VERSION = 'v1.8';
+const APP_VERSION = 'v1.9';
 
 const STORE_KEY = 'macho:v1';
 const MEALS = [
@@ -250,7 +250,8 @@ function openAmount(food, meal, entry = null) {
   $('#amount-title').textContent = food.n;
   const unitName = !food.u || food.u === '1회 제공량' ? '1회' : food.u;
   $('#amount-unit').innerHTML = `1회 제공량: ${food.u && food.u !== '1회 제공량' ? esc(food.u) + ' = ' : ''}${r0(food.g)}g · ${r0(food.k)} kcal`
-    + (food.miss?.length ? `<br><span class="miss">${food.miss.map((m) => ({ c: '탄수화물', p: '단백질', f: '지방' })[m]).join('·')} 정보가 없어서 0으로 계산돼요</span>` : '');
+    + (food.miss?.length ? `<br><span class="miss">${food.miss.map((m) => ({ c: '탄수화물', p: '단백질', f: '지방' })[m]).join('·')} 정보가 없어서 0으로 계산돼요</span>` : '')
+    + (food.src === '바코드' ? '<br><span class="small">누구나 고칠 수 있는 공개 DB(Open Food Facts) 정보예요. 포장지와 다르면 아래 "영양 정보 고치기"를 눌러 주세요.</span>' : '');
   $('#amount-g').value = r1(entry ? entry.grams : food.g);
   $('#serving-chips').innerHTML = [0.5, 1, 1.5, 2, 3].map((x) => `<button data-x="${x}">${esc(unitName)}${x === 1 ? '' : ' ×' + x}</button>`).join('');
   $('#meal-select').innerHTML = MEALS.map((m) => `<button data-meal="${m.id}" class="${m.id === meal ? 'active' : ''}">${m.name}</button>`).join('');
@@ -304,28 +305,60 @@ $('#amount-delete').onclick = () => {
 
 // ---------- 직접 입력 ----------
 let pendingBarcode = null;
-function openCustom(name, barcode = null) {
+let editCtx = null; // 고치기: { entry, meal }
+function openCustom(name, barcode = null, prefill = null) {
   pendingBarcode = barcode;
-  $('#cf-hint').textContent = barcode
-    ? `바코드 ${barcode} 제품을 처음 봤어요. 포장지 영양성분표를 보고 입력하면 다음부터 이 바코드로 바로 나와요.`
-    : '식품 포장지 영양성분표를 보고 입력하세요.';
+  $('#cf-hint').textContent = prefill
+    ? '포장지 영양성분표의 숫자로 고쳐 주세요. 고친 내용은 저장되고, 이미 기록한 것도 같이 고쳐져요.'
+    : barcode
+      ? `바코드 ${barcode} 제품을 처음 봤어요. 포장지 영양성분표를 보고 입력하면 다음부터 이 바코드로 바로 나와요.`
+      : '식품 포장지 영양성분표를 보고 입력하세요.';
   $('#cf-name').value = name;
   ['#cf-unit', '#cf-c', '#cf-p', '#cf-f', '#cf-k'].forEach((s) => ($(s).value = ''));
   $('#cf-g').value = 100;
+  if (prefill) {
+    const v = (x) => String(Math.round(x * 10) / 10);
+    $('#cf-unit').value = prefill.u && prefill.u !== '1회 제공량' ? prefill.u : '';
+    $('#cf-g').value = v(prefill.g);
+    $('#cf-c').value = prefill.miss?.includes('c') ? '' : v(prefill.c);
+    $('#cf-p').value = prefill.miss?.includes('p') ? '' : v(prefill.p);
+    $('#cf-f').value = prefill.miss?.includes('f') ? '' : v(prefill.f);
+    $('#cf-k').value = v(prefill.k);
+  }
+  $('#cf-submit').textContent = prefill ? '고치기' : '다음';
   openSheet('custom-sheet');
 }
-$('#custom-btn').onclick = () => openCustom($('#search-input').value.trim());
+$('#amount-edit').onclick = () => {
+  const { food, entry, meal } = amountCtx;
+  editCtx = { entry, meal };
+  openCustom(food.n, food.bc || null, food);
+};
+// 같은 음식(바코드가 같거나, 바코드가 없으면 이름이 같은 것)의 저장본·기록을 새 정보로 바꿈
+function replaceFood(old, food) {
+  const same = (f) => (old.bc ? f.bc === old.bc : !f.bc && f.n === old.n);
+  for (const day of Object.values(state.log)) for (const e of day) if (same(e.food)) e.food = { ...food };
+  state.recent = state.recent.map((f) => (same(f) ? { ...food } : f));
+}
+$('#custom-btn').onclick = () => { editCtx = null; openCustom($('#search-input').value.trim()); };
 $('#cf-submit').onclick = () => {
   const name = $('#cf-name').value.trim();
   if (!name) return toast('이름을 입력해 주세요');
   const num = (s) => parseFloat($(s).value) || 0;
   const food = { n: name, u: $('#cf-unit').value.trim() || '1회', g: num('#cf-g') || 100, c: num('#cf-c'), p: num('#cf-p'), f: num('#cf-f') };
   food.k = $('#cf-k').value ? num('#cf-k') : r0(kcalOf(food));
-  if (pendingBarcode) { food.bc = pendingBarcode; state.barcodes[pendingBarcode] = food; save(); }
+  if (pendingBarcode) { food.bc = pendingBarcode; state.barcodes[pendingBarcode] = food; }
   if ($('#cf-save').checked) {
-    state.customFoods = [food, ...state.customFoods.filter((f) => f.n !== name)];
-    save();
+    state.customFoods = [food, ...state.customFoods.filter((f) => f.n !== name && !(food.bc && f.bc === food.bc))];
   }
+  if (editCtx) {
+    const { entry, meal } = editCtx;
+    replaceFood(amountCtx.food, food);
+    editCtx = null;
+    save();
+    if (entry) { closeSheets(); renderToday(); return toast('고쳤어요'); }
+    return openAmount(food, meal);
+  }
+  save();
   openAmount(food, pendingMeal);
 };
 

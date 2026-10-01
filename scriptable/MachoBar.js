@@ -3,7 +3,7 @@
 // icon-color: deep-blue; icon-glyph: chart-bar;
 
 // Macho 탄단지 위젯 (막대)
-// 버전: v1.11
+// 버전: v1.18
 // 이 스크립트 이름은 "MachoBar" 로 저장하세요.
 // 숫자는 "Macho" 스크립트가 저장해 둔 것을 읽어요. (Macho 앱 → 잠금화면에 반영)
 
@@ -21,8 +21,12 @@ function read() {
   let s = null;
   try { if (fm.fileExists(PATH)) s = JSON.parse(fm.readString(PATH)); } catch (e) {}
   const fresh = !!s && s.d === todayKey();
+  const y = new Date(); y.setDate(y.getDate() - 1);
+  const yKey = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, '0')}-${String(y.getDate()).padStart(2, '0')}`;
   return {
     c: fresh ? s.c : 0, p: fresh ? s.p : 0, f: fresh ? s.f : 0,
+    // 연속 기록: 오늘이나 어제 반영한 값만 유효 (그보다 오래되면 끊긴 것)
+    st: s && (fresh || s.d === yKey) ? (s.st || 0) : 0,
     goals: s ? { c: s.gc, p: s.gp, f: s.gf } : { c: 250, p: 120, f: 60 },
   };
 }
@@ -49,25 +53,41 @@ function text(stack, str, size, bold) {
   return t;
 }
 
-// 잠금화면 직사각형: 세 칸 (이름 / 막대 / 먹은 g / 목표 g)
+// 잠금화면 직사각형: 세 칸 (이름 / 막대 / 먹은 g / 목표 g) + 오른쪽 아래 연속 기록
 function rectWidget(v) {
   const w = new ListWidget();
   w.setPadding(0, 0, 0, 0);
   const row = w.addStack();
   MACROS.forEach(([label, key], i) => {
     const col = row.addStack();
-    col.size = new Size(48, 0); // 칸 폭 고정 → 숫자가 길어져도 막대 위치 그대로
+    col.size = new Size(40, 0); // 칸 폭 고정 → 숫자가 길어져도 막대 위치 그대로
     col.layoutVertically();
     // 순서: 이름 → 막대 → 먹은 양 → 목표
     text(col, label, 12, false);
     col.addSpacer(2);
-    const img = col.addImage(bar(v[key] / (v.goals[key] || 1), 46, 6));
-    img.imageSize = new Size(46, 6);
+    const img = col.addImage(bar(v[key] / (v.goals[key] || 1), 38, 6));
+    img.imageSize = new Size(38, 6);
     col.addSpacer(2);
     text(col, String(Math.round(v[key])), 22, true);
     text(col, `/${Math.round(v.goals[key])}g`, 11, false);
-    if (i < 2) row.addSpacer(6);
+    row.addSpacer(4);
   });
+
+  // 오른쪽 아래: 불꽃 + 연속 기록 일수
+  const streak = row.addStack();
+  streak.size = new Size(24, 0);
+  streak.layoutVertically();
+  streak.addSpacer();
+  const flameLine = streak.addStack();
+  flameLine.addSpacer();
+  const flame = flameLine.addImage(SFSymbol.named('flame.fill').image);
+  flame.imageSize = new Size(13, 13);
+  flame.tintColor = Color.white();
+  flameLine.addSpacer();
+  const numLine = streak.addStack();
+  numLine.addSpacer();
+  text(numLine, String(v.st), 13, true);
+  numLine.addSpacer();
   return w;
 }
 

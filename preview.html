@@ -100,6 +100,7 @@ figcaption code { font-family: var(--ui); background: var(--panel); border: 1px 
       <label>목표 탄 g<input id="gc" type="number" value="250"></label>
       <label>목표 단 g<input id="gp" type="number" value="120"></label>
       <label>목표 지 g<input id="gf" type="number" value="60"></label>
+      <label>연속 기록 일<input id="st" type="number" value="12"></label>
     </div>
     <div class="presets">
       <button data-p="0,0,0,0,0,0,0">아침 전 (0)</button>
@@ -125,6 +126,7 @@ function data() {
   const n = (id) => Math.max(0, Number($('#' + id).value) || 0);
   const v = { c: n('c'), p: n('p'), f: n('f'), goals: { c: n('gc'), p: n('gp'), f: n('gf') } };
   for (const [, k] of MEALS) v[k] = n(k);
+  v.st = Math.round(n('st'));
   v.k = MEALS.reduce((s, [, k]) => s + v[k], 0);
   v.gk = v.goals.c * 4 + v.goals.p * 4 + v.goals.f * 9;
   return v;
@@ -158,9 +160,10 @@ const kcalWidget = (v) => `<div class="w rect"><div style="display:flex;align-it
 </div></div>`;
 
 // MachoBar.js: 세 칸 + 막대
-const barWidget = (v) => `<div class="w rect"><div class="cols">${MAC.map(([l, k]) => `<div class="col" style="gap:0;width:48px;flex:none">
-  ${T('sm', 12, l)}<div style="height:2px"></div>${bar(pct(v[k], v.goals[k]), 46, 6)}<div style="height:2px"></div>${T('big', 22, Math.round(v[k]))}${T('sm', 11, '/' + Math.round(v.goals[k]) + 'g')}
-</div>`).join('')}</div></div>`;
+const barWidget = (v) => `<div class="w rect"><div class="cols" style="gap:4px">${MAC.map(([l, k]) => `<div class="col" style="gap:0;width:40px;flex:none">
+  ${T('sm', 12, l)}<div style="height:2px"></div>${bar(pct(v[k], v.goals[k]), 38, 6)}<div style="height:2px"></div>${T('big', 22, Math.round(v[k]))}${T('sm', 11, '/' + Math.round(v.goals[k]) + 'g')}
+</div>`).join('')}<div style="width:24px;flex:none;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;line-height:1.1">
+  <span style="font-size:12px">🔥</span>${T('big', 13, v.st)}</div></div></div>`;
 
 const phone = (v, widgets, title, how) => `<figure>
   <div class="phone"><div class="screen">

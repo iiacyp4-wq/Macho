@@ -3,7 +3,7 @@
 // icon-color: deep-green; icon-glyph: utensils;
 
 // Macho 칼로리 위젯 (원형)
-// 버전: v1.7
+// 버전: v1.18
 // 이 스크립트 이름을 반드시 "Macho" 로 저장하세요. (Macho 앱의 반영 버튼이 이 이름을 부르고,
 // 받은 숫자를 저장해서 MachoBar 위젯도 같이 씁니다)
 
@@ -20,7 +20,7 @@ function todayKey() {
 const q = args.queryParameters || {};
 if (q.d) {
   const data = { d: q.d, at: Date.now() };
-  for (const key of ['k', 'c', 'p', 'f', 'gc', 'gp', 'gf', 'kb', 'kl', 'kd', 'ks']) data[key] = Number(q[key]) || 0;
+  for (const key of ['k', 'c', 'p', 'f', 'gc', 'gp', 'gf', 'kb', 'kl', 'kd', 'ks', 'st']) data[key] = Number(q[key]) || 0;
   fm.writeString(PATH, JSON.stringify(data));
 }
 

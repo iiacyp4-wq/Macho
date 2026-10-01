@@ -1,7 +1,7 @@
 'use strict';
 
 // 고칠 때마다 올리는 버전 (탭바 오른쪽 아래, 설정 맨 아래에 표시)
-const APP_VERSION = 'v1.17';
+const APP_VERSION = 'v1.18';
 
 const STORE_KEY = 'macho:v1';
 const MEALS = [
@@ -739,6 +739,15 @@ async function updateNotification() {
 }
 
 // ---------- 아이폰 잠금화면 위젯 (Scriptable) ----------
+// 연속 기록 일수: 오늘 기록이 있으면 오늘부터, 아직 없으면 어제부터 거꾸로 셈
+function streakDays() {
+  const has = (k) => (state.log[k] || []).length > 0;
+  let k = todayKey();
+  if (!has(k)) k = addDays(k, -1);
+  let n = 0;
+  while (has(k)) { n++; k = addDays(k, -1); }
+  return n;
+}
 function widgetQuery() {
   const day = todayKey(), t = totalsFor(day), g = state.goals;
   const mealKcal = (meal) => r0((state.log[day] || []).filter((e) => e.meal === meal).reduce((s, e) => s + scale(e.food, e.grams).k, 0));
@@ -746,6 +755,7 @@ function widgetQuery() {
     d: day, k: r0(t.k), c: r0(t.c), p: r0(t.p), f: r0(t.f),
     gc: r0(g.c), gp: r0(g.p), gf: r0(g.f),
     kb: mealKcal('breakfast'), kl: mealKcal('lunch'), kd: mealKcal('dinner'), ks: mealKcal('snack'),
+    st: streakDays(),
   }).toString();
 }
 function renderWidgetButton() {

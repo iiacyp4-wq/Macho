@@ -1,7 +1,7 @@
 'use strict';
 
 // 고칠 때마다 올리는 버전 (탭바 오른쪽 아래, 설정 맨 아래에 표시)
-const APP_VERSION = 'v1.14';
+const APP_VERSION = 'v1.15';
 
 const STORE_KEY = 'macho:v1';
 const MEALS = [
@@ -789,6 +789,18 @@ document.addEventListener('visibilitychange', () => {
   if (todayKey() !== lastToday) { lastToday = todayKey(); currentDay = lastToday; }
   renderToday(); updateNotification();
 });
+
+// ---------- 햅틱 ----------
+// 안드로이드: 진동 API / 아이폰(iOS 18+): 숨은 스위치를 대신 눌러 햅틱을 냄
+function haptic() {
+  if (navigator.vibrate) { navigator.vibrate(10); return; }
+  $('#haptic-label').click();
+}
+document.addEventListener('click', (ev) => {
+  if (ev.target.closest('#haptic-label')) return;
+  if (ev.target.matches('input[type=checkbox]')) return; // 라벨 누를 때 따라오는 두 번째 클릭
+  if (ev.target.closest('button, .btn, [data-entry], .switch-row')) haptic();
+}, true);
 
 // ---------- 버전 표시 ----------
 $('#app-version').textContent = APP_VERSION;

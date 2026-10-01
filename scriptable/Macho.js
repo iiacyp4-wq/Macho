@@ -2,11 +2,13 @@
 // These must be at the very top of the file. Do not edit.
 // icon-color: deep-green; icon-glyph: utensils;
 
-// Macho 잠금화면 위젯
-// 이 스크립트 이름을 반드시 "Macho" 로 저장하세요. (Macho 앱이 이 이름으로 부릅니다)
+// Macho 칼로리 위젯 (원형)
+// 이 스크립트 이름을 반드시 "Macho" 로 저장하세요. (Macho 앱의 반영 버튼이 이 이름을 부르고,
+// 받은 숫자를 저장해서 MachoBar 위젯도 같이 씁니다)
 
 const fm = FileManager.local();
 const PATH = fm.joinPath(fm.documentsDirectory(), 'macho-today.json');
+const MEALS = [['아침', 'kb', 1], ['점심', 'kl', 0.75], ['저녁', 'kd', 0.55], ['간식', 'ks', 0.38]]; // 이름, 키, 진하기
 
 function todayKey() {
   const d = new Date();
@@ -16,175 +18,119 @@ function todayKey() {
 // 1) Macho 앱의 "잠금화면에 반영" 버튼으로 열렸을 때: 받은 숫자를 저장
 const q = args.queryParameters || {};
 if (q.d) {
-  const num = (x) => Number(x) || 0;
-  fm.writeString(PATH, JSON.stringify({
-    d: q.d, k: num(q.k), c: num(q.c), p: num(q.p), f: num(q.f),
-    gc: num(q.gc), gp: num(q.gp), gf: num(q.gf), at: Date.now(),
-  }));
+  const data = { d: q.d, at: Date.now() };
+  for (const key of ['k', 'c', 'p', 'f', 'gc', 'gp', 'gf', 'kb', 'kl', 'kd', 'ks']) data[key] = Number(q[key]) || 0;
+  fm.writeString(PATH, JSON.stringify(data));
 }
 
 // 2) 저장된 값 읽기 (날짜가 바뀌었으면 0부터 다시)
 function read() {
   let s = null;
   try { if (fm.fileExists(PATH)) s = JSON.parse(fm.readString(PATH)); } catch (e) {}
-  const goals = s ? { c: s.gc, p: s.gp, f: s.gf } : { c: 250, p: 120, f: 60 };
   const fresh = !!s && s.d === todayKey();
-  return {
-    k: fresh ? s.k : 0, c: fresh ? s.c : 0, p: fresh ? s.p : 0, f: fresh ? s.f : 0,
-    goals, gk: goals.c * 4 + goals.p * 4 + goals.f * 9,
-  };
+  const g = s ? { c: s.gc, p: s.gp, f: s.gf } : { c: 250, p: 120, f: 60 };
+  const v = { gk: g.c * 4 + g.p * 4 + g.f * 9 };
+  for (const [, key] of MEALS) v[key] = fresh ? (s[key] || 0) : 0;
+  v.k = fresh ? s.k : 0;
+  return v;
 }
 
-// ---------- 그림 도구 ----------
-function bar(frac, w, h, color, bg) {
-  const ctx = new DrawContext();
-  ctx.size = new Size(w, h); ctx.opaque = false; ctx.respectScreenScale = true;
-  const back = new Path(); back.addRoundedRect(new Rect(0, 0, w, h), h / 2, h / 2);
-  ctx.addPath(back); ctx.setFillColor(bg); ctx.fillPath();
-  const fw = Math.max(0, Math.min(1, frac)) * w;
-  if (fw > 0) {
-    const p = new Path(); p.addRoundedRect(new Rect(0, 0, Math.max(fw, h), h), h / 2, h / 2);
-    ctx.addPath(p); ctx.setFillColor(color); ctx.fillPath();
-  }
-  return ctx.getImage();
-}
-
-function ring(frac, size, lw, color, bg) {
+// ---------- 그림 ----------
+// 끼니별로 나눠진 링: 각 조각 길이 = 그 끼니 칼로리 / 목표 칼로리
+function mealRing(v, size, lw) {
   const ctx = new DrawContext();
   ctx.size = new Size(size, size); ctx.opaque = false; ctx.respectScreenScale = true;
   const c = size / 2, r = size / 2 - lw / 2;
-  const arc = (to) => {
-    const pts = [], n = Math.max(2, Math.ceil(to * 90));
+  const arc = (from, to) => {
+    const pts = [], n = Math.max(2, Math.ceil((to - from) * 120));
     for (let i = 0; i <= n; i++) {
-      const a = (to * i / n) * 2 * Math.PI - Math.PI / 2;
+      const a = (from + (to - from) * i / n) * 2 * Math.PI - Math.PI / 2;
       pts.push(new Point(c + r * Math.cos(a), c + r * Math.sin(a)));
     }
     const p = new Path(); p.addLines(pts); return p;
   };
   ctx.setLineWidth(lw);
-  ctx.setStrokeColor(bg); ctx.addPath(arc(1)); ctx.strokePath();
-  if (frac > 0) { ctx.setStrokeColor(color); ctx.addPath(arc(Math.min(frac, 1))); ctx.strokePath(); }
+  ctx.setStrokeColor(new Color('#ffffff', 0.2)); ctx.addPath(arc(0, 1)); ctx.strokePath();
+  // 목표를 넘으면 링 전체를 끼니 비율대로 채움
+  const scale = 1 / Math.max(v.gk || 1, v.k || 0);
+  const gap = 0.012;
+  let at = 0;
+  for (const [, key, alpha] of MEALS) {
+    const len = v[key] * scale;
+    if (len <= 0) continue;
+    const to = Math.min(1, at + len);
+    if (to - at > gap * 1.5) {
+      ctx.setStrokeColor(new Color('#ffffff', alpha));
+      ctx.addPath(arc(at, to - gap)); ctx.strokePath();
+    }
+    at = to;
+  }
   return ctx.getImage();
 }
 
-const MACROS = [['탄', 'c', '#f5a623'], ['단', 'p', '#3b82f6'], ['지', 'f', '#ec4899']];
-const leftText = (v) => {
-  const left = Math.round(v.gk - v.k);
-  return left >= 0 ? `${left} kcal 남음` : `${-left} kcal 초과`;
-};
+function dot(alpha) {
+  const ctx = new DrawContext();
+  ctx.size = new Size(8, 8); ctx.opaque = false; ctx.respectScreenScale = true;
+  const p = new Path(); p.addEllipse(new Rect(0, 0, 8, 8));
+  ctx.addPath(p); ctx.setFillColor(new Color('#ffffff', alpha)); ctx.fillPath();
+  return ctx.getImage();
+}
 
-// ---------- 위젯 모양 ----------
-// 위젯 설정의 Parameter 칸에 적은 글자로 모양을 고름
-//   직사각형: (비움) = 칼로리+탄단지 / 칼로리 = 남은 칼로리만 크게 / 탄단지 = 탄단지만 크게
-//   원형:     (비움) = 칼로리 / 탄 / 단 / 지
-const PARAM = String(args.widgetParameter || '').trim();
-const WHITE = Color.white();
-const DIM = new Color('#ffffff', 0.3);
-const big = (stack, text, size) => {
-  const t = stack.addText(text);
-  t.font = Font.boldRoundedSystemFont ? Font.boldRoundedSystemFont(size) : Font.boldSystemFont(size);
-  t.lineLimit = 1; t.minimumScaleFactor = 0.5;
+const font = (size, bold) => bold
+  ? (Font.boldRoundedSystemFont ? Font.boldRoundedSystemFont(size) : Font.boldSystemFont(size))
+  : Font.semiboldSystemFont(size);
+function text(stack, str, size, bold) {
+  const t = stack.addText(str);
+  t.font = font(size, bold); t.lineLimit = 1; t.minimumScaleFactor = 0.6;
   return t;
-};
-const small = (stack, text, size) => {
-  const t = stack.addText(text);
-  t.font = Font.semiboldSystemFont(size); t.lineLimit = 1; t.minimumScaleFactor = 0.6;
-  return t;
-};
-const leftNum = (v) => Math.round(v.gk - v.k);
+}
 
-// 잠금화면 직사각형 — 기본: 남은 칼로리 크게 + 탄단지
-function rectDefault(v) {
+// ---------- 위젯 ----------
+// 잠금화면 직사각형: 왼쪽 링(가운데 총 섭취) + 오른쪽 끼니별 칼로리
+function rectWidget(v) {
   const w = new ListWidget();
-  const top = w.addStack();
-  top.bottomAlignContent();
-  big(top, String(Math.abs(leftNum(v))), 26);
-  top.addSpacer(4);
-  small(top, leftNum(v) >= 0 ? 'kcal 남음' : 'kcal 초과', 12);
-  w.addSpacer(3);
   const row = w.addStack();
-  MACROS.forEach(([label, key], i) => {
-    const col = row.addStack();
-    col.layoutVertically();
-    small(col, `${label} ${Math.round(v[key])}`, 15);
-    col.addSpacer(3);
-    const img = col.addImage(bar(v[key] / (v.goals[key] || 1), 46, 5, WHITE, DIM));
-    img.imageSize = new Size(46, 5);
-    if (i < 2) row.addSpacer(6);
+  row.centerAlignContent();
+
+  const ringBox = row.addStack();
+  ringBox.size = new Size(66, 66);
+  ringBox.backgroundImage = mealRing(v, 66, 7);
+  ringBox.layoutVertically();
+  ringBox.centerAlignContent();
+  ringBox.addSpacer();
+  const n = text(ringBox, String(Math.round(v.k)), 16, true); n.centerAlignText();
+  const g = text(ringBox, `/${Math.round(v.gk)}`, 9, false); g.centerAlignText();
+  ringBox.addSpacer();
+
+  row.addSpacer(10);
+  const list = row.addStack();
+  list.layoutVertically();
+  MEALS.forEach(([name, key, alpha], i) => {
+    const line = list.addStack();
+    line.centerAlignContent();
+    const d = line.addImage(dot(alpha)); d.imageSize = new Size(7, 7);
+    line.addSpacer(4);
+    text(line, name, 12, false);
+    line.addSpacer();
+    text(line, String(Math.round(v[key])), 13, true);
+    if (i < MEALS.length - 1) list.addSpacer(1);
   });
   return w;
 }
 
-// 잠금화면 직사각형 — "칼로리": 남은 칼로리 크게 + 진행 막대
-function rectKcal(v) {
-  const w = new ListWidget();
-  const top = w.addStack();
-  top.bottomAlignContent();
-  big(top, String(Math.abs(leftNum(v))), 32);
-  top.addSpacer(4);
-  small(top, `kcal ${leftNum(v) >= 0 ? '남음' : '초과'}`, 13);
-  w.addSpacer(4);
-  const img = w.addImage(bar(v.k / (v.gk || 1), 150, 7, WHITE, DIM));
-  img.imageSize = new Size(150, 7);
-  w.addSpacer(3);
-  small(w, `먹음 ${Math.round(v.k)} / ${Math.round(v.gk)}`, 13);
-  return w;
-}
-
-// 잠금화면 직사각형 — "탄단지": 기본 모양(세 칸 + 막대)을 크게
-function rectMacros(v) {
-  const w = new ListWidget();
-  const row = w.addStack();
-  MACROS.forEach(([label, key], i) => {
-    const col = row.addStack();
-    col.layoutVertically();
-    small(col, label, 12);
-    big(col, String(Math.round(v[key])), 22);
-    col.addSpacer(2);
-    const img = col.addImage(bar(v[key] / (v.goals[key] || 1), 46, 6, WHITE, DIM));
-    img.imageSize = new Size(46, 6);
-    col.addSpacer(1);
-    small(col, `/${Math.round(v.goals[key])}g`, 11);
-    if (i < 2) row.addSpacer(6);
-  });
-  return w;
-}
-
-// 잠금화면 원형 — 링 하나에 숫자 하나
+// 잠금화면 원형: 링 + 총 섭취
 function circleWidget(v) {
   const w = new ListWidget();
-  const m = MACROS.find(([label]) => label === PARAM);
-  const frac = m ? v[m[1]] / (v.goals[m[1]] || 1) : v.k / (v.gk || 1);
-  w.backgroundImage = ring(frac, 64, 7, WHITE, DIM);
-  const n = big(w, m ? String(Math.round(v[m[1]])) : String(Math.abs(leftNum(v))), m ? 20 : 17);
-  n.centerAlignText();
-  const s = small(w, m ? `${m[0]}/${Math.round(v.goals[m[1]])}` : (leftNum(v) >= 0 ? '남음' : '초과'), 10);
-  s.centerAlignText();
+  w.backgroundImage = mealRing(v, 64, 7);
+  const n = text(w, String(Math.round(v.k)), 16, true); n.centerAlignText();
+  const g = text(w, 'kcal', 9, false); g.centerAlignText();
   return w;
 }
 
 // 잠금화면 시계 위 한 줄
 function inlineWidget(v) {
   const w = new ListWidget();
-  w.addText(`🔥${leftText(v)} · 단 ${Math.round(v.p)}/${Math.round(v.goals.p)}g`);
-  return w;
-}
-
-// 홈 화면용 컬러 위젯
-function homeWidget(v) {
-  const w = new ListWidget();
-  w.backgroundColor = new Color('#111827');
-  const title = big(w, leftText(v), 20);
-  title.textColor = WHITE;
-  w.addSpacer(10);
-  MACROS.forEach(([label, key, hex], i) => {
-    const t = small(w, `${label} ${Math.round(v[key])}/${Math.round(v.goals[key])}g`, 13);
-    t.textColor = WHITE;
-    w.addSpacer(3);
-    const img = w.addImage(bar(v[key] / (v.goals[key] || 1), 120, 6, new Color(hex), new Color('#ffffff', 0.15)));
-    img.imageSize = new Size(120, 6);
-    if (i < 2) w.addSpacer(6);
-  });
+  w.addText(`🔥${Math.round(v.k)} / ${Math.round(v.gk)} kcal`);
   return w;
 }
 
@@ -194,10 +140,7 @@ const fam = config.widgetFamily || '';
 let widget;
 if (fam === 'accessoryCircular') widget = circleWidget(v);
 else if (fam === 'accessoryInline') widget = inlineWidget(v);
-else if (config.runsInWidget && !fam.startsWith('accessory')) widget = homeWidget(v);
-else if (PARAM === '칼로리') widget = rectKcal(v);
-else if (PARAM === '탄단지') widget = rectMacros(v);
-else widget = rectDefault(v);
+else widget = rectWidget(v);
 widget.refreshAfterDate = new Date(Date.now() + 5 * 60 * 1000);
 
 if (config.runsInWidget) {

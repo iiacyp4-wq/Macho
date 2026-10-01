@@ -398,10 +398,12 @@ async function updateNotification() {
 
 // ---------- 아이폰 잠금화면 위젯 (Scriptable) ----------
 function widgetQuery() {
-  const t = totalsFor(todayKey()), g = state.goals;
+  const day = todayKey(), t = totalsFor(day), g = state.goals;
+  const mealKcal = (meal) => r0((state.log[day] || []).filter((e) => e.meal === meal).reduce((s, e) => s + scale(e.food, e.grams).k, 0));
   return new URLSearchParams({
-    d: todayKey(), k: r0(t.k), c: r0(t.c), p: r0(t.p), f: r0(t.f),
+    d: day, k: r0(t.k), c: r0(t.c), p: r0(t.p), f: r0(t.f),
     gc: r0(g.c), gp: r0(g.p), gf: r0(g.f),
+    kb: mealKcal('breakfast'), kl: mealKcal('lunch'), kd: mealKcal('dinner'), ks: mealKcal('snack'),
   }).toString();
 }
 function renderWidgetButton() {
@@ -422,17 +424,20 @@ $('#widget-sync').onclick = () => {
 };
 $('#widget-toggle').onchange = (ev) => { state.widget = ev.target.checked; save(); };
 
-let scriptText = '';
+const scriptTexts = {};
 function prefetchScript() {
-  if (!scriptText) fetch('scriptable/Macho.js').then((r) => r.text()).then((t) => (scriptText = t)).catch(() => {});
+  for (const name of ['Macho', 'MachoBar']) {
+    if (!scriptTexts[name]) fetch(`scriptable/${name}.js`).then((r) => r.text()).then((t) => (scriptTexts[name] = t)).catch(() => {});
+  }
 }
-$('#copy-script').onclick = async () => {
+$$('[data-copy]').forEach((btn) => (btn.onclick = async () => {
+  const name = btn.dataset.copy;
   try {
-    if (!scriptText) scriptText = await (await fetch('scriptable/Macho.js')).text();
-    await navigator.clipboard.writeText(scriptText);
-    toast('복사했어요! Scriptable에 붙여넣으세요');
+    if (!scriptTexts[name]) scriptTexts[name] = await (await fetch(`scriptable/${name}.js`)).text();
+    await navigator.clipboard.writeText(scriptTexts[name]);
+    toast(`복사했어요! Scriptable에서 이름을 ${name}(으)로`);
   } catch { toast('복사 실패. 한 번 더 눌러 주세요'); }
-};
+}));
 
 // ---------- 탭 ----------
 function showView(name) {

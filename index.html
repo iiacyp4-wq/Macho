@@ -69,11 +69,16 @@
       <h2>아이폰 잠금화면 위젯</h2>
       <ol class="steps small">
         <li>앱스토어에서 무료 앱 <b>Scriptable</b>을 설치해요.</li>
-        <li>아래 <b>스크립트 복사</b>를 누르고, Scriptable을 열어 <b>＋</b> → 붙여넣기 → 맨 위 제목을 눌러 이름을 <b>Macho</b>로 바꾸고 <b>Done</b>.</li>
-        <li>잠금화면을 길게 누르기 → <b>사용자화</b> → 잠금화면 → 시계 아래 위젯 칸 → <b>Scriptable</b> → 직사각형(또는 원형) 추가 → 추가된 위젯을 눌러 Script를 <b>Macho</b>로 선택.</li>
+        <li>스크립트가 2개예요. 각각 복사 버튼을 누르고, Scriptable에서 <b>＋</b> → 붙여넣기 → 맨 위 제목을 눌러 이름을 정확히 바꾸고 <b>Done</b>.
+          <br>· 칼로리 원형 위젯 → 이름 <b>Macho</b>
+          <br>· 탄단지 막대 위젯 → 이름 <b>MachoBar</b></li>
+        <li>잠금화면을 길게 누르기 → <b>사용자화</b> → 잠금화면 → 시계 아래 위젯 칸 → <b>Scriptable</b> 직사각형 2개 추가 → 각 위젯을 눌러 Script를 왼쪽 <b>Macho</b>, 오른쪽 <b>MachoBar</b>로 선택. (Parameter 칸은 비워 두세요)</li>
         <li>아래 스위치를 켜면 오늘 화면에 <b>잠금화면에 반영</b> 버튼이 생겨요. 누르면 Scriptable이 잠깐 열렸다가 숫자를 저장해요. 왼쪽 위 <b>◀ Macho</b>를 눌러 돌아오면 돼요.</li>
       </ol>
-      <button class="btn wide" id="copy-script">스크립트 복사</button>
+      <div class="row">
+        <button class="btn" data-copy="Macho">칼로리 스크립트 복사<br>(Macho)</button>
+        <button class="btn" data-copy="MachoBar">탄단지 스크립트 복사<br>(MachoBar)</button>
+      </div>
       <a class="btn wide" href="preview.html">위젯 모양 미리보기</a>
       <label class="switch-row"><span>잠금화면 위젯 사용</span><input type="checkbox" id="widget-toggle"></label>
       <p class="muted small">위젯 숫자가 바뀌는 시점은 아이폰이 정해서, 반영 후 보통 몇 분 안에 바뀌어요.</p>

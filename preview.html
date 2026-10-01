@@ -90,18 +90,22 @@ figcaption code { font-family: var(--ui); background: var(--panel); border: 1px 
   <section class="controls" aria-label="예시 숫자">
     <h2>예시 숫자 (내 실제 기록 아님)</h2>
     <div class="inputs">
-      <label>먹은 탄수화물 g<input id="c" type="number" value="121"></label>
-      <label>먹은 단백질 g<input id="p" type="number" value="68"></label>
-      <label>먹은 지방 g<input id="f" type="number" value="43"></label>
+      <label>아침 kcal<input id="kb" type="number" value="150"></label>
+      <label>점심 kcal<input id="kl" type="number" value="750"></label>
+      <label>저녁 kcal<input id="kd" type="number" value="0"></label>
+      <label>간식 kcal<input id="ks" type="number" value="252"></label>
+      <label>먹은 탄 g<input id="c" type="number" value="121"></label>
+      <label>먹은 단 g<input id="p" type="number" value="68"></label>
+      <label>먹은 지 g<input id="f" type="number" value="43"></label>
       <label>목표 탄 g<input id="gc" type="number" value="250"></label>
       <label>목표 단 g<input id="gp" type="number" value="120"></label>
       <label>목표 지 g<input id="gf" type="number" value="60"></label>
     </div>
     <div class="presets">
-      <button data-p="0,0,0">아침 전 (0)</button>
-      <button data-p="121,68,43">점심 후</button>
-      <button data-p="248,131,72">저녁 후 (초과)</button>
-      <button data-p="1250,1180,960">아주 큰 숫자</button>
+      <button data-p="0,0,0,0,0,0,0">아침 전 (0)</button>
+      <button data-p="150,750,0,252,121,68,43">점심 후</button>
+      <button data-p="420,750,680,300,248,131,72">저녁 후 (초과)</button>
+      <button data-p="1200,1500,1800,900,1250,1180,960">아주 큰 숫자</button>
     </div>
     <div class="opts">
       <label><input type="checkbox" id="guide" checked> 위젯 칸 테두리 보기 (점선 밖은 잘려요)</label>
@@ -109,59 +113,58 @@ figcaption code { font-family: var(--ui); background: var(--panel); border: 1px 
   </section>
 
   <div class="phones" id="phones"></div>
-  <p class="note">칼로리는 탄×4 + 단×4 + 지×9로 계산해요. 실제 폰에서는 글자가 칸보다 길면 Scriptable이 자동으로 조금 줄여 줘요. 이 미리보기에서는 줄이지 않고 그대로 보여 줘서, 점선을 넘으면 폰에서 글자가 작아진다는 뜻이에요. 폰 기종(Pro Max 등)에 따라 칸이 몇 pt 더 넓을 수 있어요.</p>
+  <p class="note">링 가운데 숫자는 아침+점심+저녁+간식 합계, 링 한 바퀴는 목표 칼로리(탄×4 + 단×4 + 지×9)예요. 잠금화면 위젯은 흰색 한 가지로만 그려져서, 끼니는 진하기(아침이 가장 진함)로 구분해요. 실제 폰에서는 글자가 칸보다 길면 Scriptable이 자동으로 조금 줄여 줘요. 이 미리보기에서는 줄이지 않아서, 점선을 넘으면 폰에서 글자가 작아진다는 뜻이에요.</p>
 </div>
 
 <script>
 const $ = (s) => document.querySelector(s);
 const MAC = [['탄', 'c'], ['단', 'p'], ['지', 'f']];
+const MEALS = [['아침', 'kb', 1], ['점심', 'kl', 0.75], ['저녁', 'kd', 0.55], ['간식', 'ks', 0.38]];
 
 function data() {
   const n = (id) => Math.max(0, Number($('#' + id).value) || 0);
   const v = { c: n('c'), p: n('p'), f: n('f'), goals: { c: n('gc'), p: n('gp'), f: n('gf') } };
-  v.k = v.c * 4 + v.p * 4 + v.f * 9;
+  for (const [, k] of MEALS) v[k] = n(k);
+  v.k = MEALS.reduce((s, [, k]) => s + v[k], 0);
   v.gk = v.goals.c * 4 + v.goals.p * 4 + v.goals.f * 9;
-  v.left = Math.round(v.gk - v.k);
   return v;
 }
 const pct = (a, b) => Math.max(0, Math.min(1, a / (b || 1))) * 100;
 const bar = (frac, w, h) => `<div class="bar" style="width:${w}px;height:${h}px"><i style="width:${frac}%"></i></div>`;
 const T = (cls, size, text) => `<span class="${cls}" style="font-size:${size}px">${text}</span>`;
-const leftWord = (v) => (v.left >= 0 ? '남음' : '초과');
 
-// 스크립트의 rectDefault
-const rectDefault = (v) => `<div class="w rect">
-  <div class="hs">${T('big', 26, Math.abs(v.left))}${T('sm', 12, 'kcal ' + leftWord(v))}</div>
-  <div style="height:3px"></div>
-  <div class="cols">${MAC.map(([l, k]) => `<div class="col">${T('sm', 15, `${l} ${Math.round(v[k])}`)}${bar(pct(v[k], v.goals[k]), 46, 5)}</div>`).join('')}</div>
-</div>`;
-// rectKcal: 남은 칼로리 크게 + 진행 막대
-const rectKcal = (v) => `<div class="w rect">
-  <div class="hs">${T('big', 32, Math.abs(v.left))}${T('sm', 13, 'kcal ' + leftWord(v))}</div>
-  <div style="height:4px"></div>${bar(pct(v.k, v.gk), 150, 7)}<div style="height:3px"></div>
-  ${T('sm', 13, `먹음 ${Math.round(v.k)} / ${Math.round(v.gk)}`)}
-</div>`;
-// rectMacros: 기본 모양(세 칸 + 막대)을 크게
-const rectMacros = (v) => `<div class="w rect"><div class="cols">${MAC.map(([l, k]) => `<div class="col" style="gap:0">
+// Macho.js의 mealRing: 끼니별 조각, 한 바퀴 = 목표 (넘으면 비율대로 꽉 채움)
+function ring(v, size, lw) {
+  const r = size / 2 - lw / 2, len = 2 * Math.PI * r, scale = 1 / Math.max(v.gk || 1, v.k), gap = 0.012;
+  let at = 0, segs = '';
+  for (const [, k, a] of MEALS) {
+    const l = v[k] * scale;
+    if (l <= 0) continue;
+    const to = Math.min(1, at + l);
+    if (to - at > gap * 1.5) segs += `<circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="rgba(255,255,255,${a})" stroke-width="${lw}"
+      stroke-dasharray="${(to - at - gap) * len} ${len}" stroke-dashoffset="${-at * len}" transform="rotate(-90 ${size / 2} ${size / 2})"/>`;
+    at = to;
+  }
+  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" aria-hidden="true">
+    <circle cx="${size / 2}" cy="${size / 2}" r="${r}" fill="none" stroke="rgba(255,255,255,.2)" stroke-width="${lw}"/>${segs}</svg>`;
+}
+
+// Macho.js: 왼쪽 링 + 오른쪽 끼니별 칼로리
+const kcalWidget = (v) => `<div class="w rect"><div style="display:flex;align-items:center;gap:10px">
+  <div style="position:relative;width:66px;height:66px;flex:none">${ring(v, 66, 7)}
+    <div style="position:absolute;inset:0;display:grid;place-content:center;text-align:center;line-height:1.05">${T('big', 16, Math.round(v.k))}${T('sm', 9, '/' + Math.round(v.gk))}</div></div>
+  <div style="display:grid;gap:1px;flex:1;min-width:0">${MEALS.map(([name, k, a]) => `<div style="display:flex;align-items:center;gap:4px">
+    <span style="width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,${a});flex:none"></span>${T('sm', 12, name)}<span style="flex:1"></span>${T('big', 13, Math.round(v[k]))}</div>`).join('')}</div>
+</div></div>`;
+
+// MachoBar.js: 세 칸 + 막대
+const barWidget = (v) => `<div class="w rect"><div class="cols">${MAC.map(([l, k]) => `<div class="col" style="gap:0">
   ${T('sm', 12, l)}${T('big', 22, Math.round(v[k]))}<div style="height:2px"></div>${bar(pct(v[k], v.goals[k]), 46, 6)}<div style="height:1px"></div>${T('sm', 11, '/' + Math.round(v.goals[k]) + 'g')}
 </div>`).join('')}</div></div>`;
-// circleWidget
-function circ(v, which) {
-  const m = MAC.find(([l]) => l === which);
-  const frac = m ? pct(v[m[1]], v.goals[m[1]]) : pct(v.k, v.gk);
-  const r = 70 / 2 - 3.5, len = 2 * Math.PI * r;
-  const num = m ? Math.round(v[m[1]]) : Math.abs(v.left);
-  const sub = m ? `${m[0]}/${Math.round(v.goals[m[1]])}` : leftWord(v);
-  return `<div class="w circ">
-    <svg viewBox="0 0 70 70" aria-hidden="true"><circle cx="35" cy="35" r="${r}" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="7"/>
-    <circle cx="35" cy="35" r="${r}" fill="none" stroke="#fff" stroke-width="7" stroke-dasharray="${len}" stroke-dashoffset="${len * (1 - frac / 100)}" transform="rotate(-90 35 35)"/></svg>
-    <div class="in">${T('big', m ? 20 : 17, num)}<br>${T('sm', 10, sub)}</div></div>`;
-}
-const inline = (v) => `🔥${Math.abs(v.left)} kcal ${leftWord(v)} · 단 ${Math.round(v.p)}/${Math.round(v.goals.p)}g`;
 
 const phone = (v, widgets, title, how) => `<figure>
   <div class="phone"><div class="screen">
-    <div class="inline">${inline(v)}</div>
+    <div class="inline"></div>
     <div class="clock">9:41</div>
     <div class="row">${widgets}</div>
   </div></div>
@@ -170,16 +173,18 @@ const phone = (v, widgets, title, how) => `<figure>
 function render() {
   const v = data();
   $('#phones').innerHTML =
-    phone(v, rectKcal(v) + rectMacros(v), '새 모양: 직사각형 2개로 크게',
-      '왼쪽 Parameter <code>칼로리</code>, 오른쪽 <code>탄단지</code>') +
-    phone(v, rectDefault(v), '비교용: 직사각형 1개 기본',
-      'Parameter 비움 (지금까지의 기본 모양)');
+    phone(v, kcalWidget(v) + barWidget(v), '직사각형 2개',
+      '왼쪽 Script <code>Macho</code>, 오른쪽 <code>MachoBar</code> (Parameter 비움)') +
+    `<figure><div style="width:${170 * 1.8}px;max-width:100%;height:${156 * 1.8}px;border-radius:20px;overflow:hidden;background:linear-gradient(170deg,var(--wall-a),var(--wall-b))">
+        <div style="transform:scale(1.8);transform-origin:top left;width:170px;padding:6px;display:grid;gap:4px">${kcalWidget(v)}${barWidget(v)}</div></div>
+      <figcaption><b>확대해서 보기</b>위 위젯 두 개를 1.8배로 키운 모습</figcaption></figure>`;
   document.body.classList.toggle('guide', $('#guide').checked);
 }
 document.querySelectorAll('input').forEach((el) => el.addEventListener('input', render));
 document.querySelectorAll('[data-p]').forEach((b) => b.addEventListener('click', () => {
-  const [c, p, f] = b.dataset.p.split(',');
-  $('#c').value = c; $('#p').value = p; $('#f').value = f; render();
+  const ids = ['kb', 'kl', 'kd', 'ks', 'c', 'p', 'f'];
+  b.dataset.p.split(',').forEach((x, i) => ($('#' + ids[i]).value = x));
+  render();
 }));
 render();
 </script>

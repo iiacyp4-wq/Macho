@@ -1,7 +1,7 @@
 'use strict';
 
 // 고칠 때마다 올리는 버전 (탭바 오른쪽 아래, 설정 맨 아래에 표시)
-const APP_VERSION = 'v1.16';
+const APP_VERSION = 'v1.17';
 
 const STORE_KEY = 'macho:v1';
 const MEALS = [
@@ -106,12 +106,22 @@ function renderToday() {
   ring.style.strokeDasharray = RING_LEN;
   ring.style.strokeDashoffset = RING_LEN * (1 - Math.min(t.k / (goal || 1), 1));
   ring.classList.toggle('over', left < 0);
+  $('.ring').classList.toggle('over', left < 0);
+  // 링 끝 점 + 펄스 위치 (svg가 -90° 돌아가 있어서 3시 방향이 시작점)
+  const a = Math.min(t.k / (goal || 1), 1) * 2 * Math.PI;
+  for (const id of ['#ring-end', '#ring-pulse']) {
+    const c = $(id);
+    c.setAttribute('cx', 60 + 52 * Math.cos(a));
+    c.setAttribute('cy', 60 + 52 * Math.sin(a));
+    c.style.display = t.k > 0 ? '' : 'none';
+  }
 
   for (const m of MACROS) {
     const el = $(`.macro[data-m="${m.id}"]`);
     const g = state.goals[m.id] || 0;
     el.querySelector('.mv').textContent = `${r0(t[m.id])} / ${r0(g)}g`;
     el.querySelector('.bar i').style.width = `${Math.min((t[m.id] / (g || 1)) * 100, 100)}%`;
+    el.querySelector('.bar i').classList.toggle('zero', !(t[m.id] > 0));
     el.classList.toggle('over', t[m.id] > g * 1.05);
   }
 

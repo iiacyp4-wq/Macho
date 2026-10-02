@@ -1,7 +1,7 @@
 'use strict';
 
 // 고칠 때마다 올리는 버전 (탭바 오른쪽 아래, 설정 맨 아래에 표시)
-const APP_VERSION = 'v1.23';
+const APP_VERSION = 'v1.24';
 
 const STORE_KEY = 'macho:v1';
 const MEALS = [
@@ -28,6 +28,12 @@ function defaultState() {
     widget: false,   // 아이폰 Scriptable 잠금화면 위젯 사용
     widgetSent: '', // 마지막으로 위젯에 보낸 값
     autoSync: true, // 기록이 바뀌면 바로 Scriptable을 열어 반영
+    sets: [],       // [{ id, name, meal, items: [{ grams, food }] }] 한 번에 추가하는 묶음
+    weights: {},    // { 'YYYY-MM-DD': kg }
+    profile: null,  // 목표 자동 계산에 넣은 값
+    lastBackup: 0,  // 마지막 백업 시각(ms)
+    backupSnooze: 0,
+    remindHour: 21, // 이 시각까지 기록이 없으면 Scriptable이 알림 (0 = 끔)
   };
 }
 function load() {
@@ -129,8 +135,11 @@ function renderToday() {
   renderWidgetButton();
 
   const entries = state.log[currentDay] || [];
+  quickMap = {};
   $('#meals').innerHTML = MEALS.map((meal) => {
     const items = entries.filter((e) => e.meal === meal.id);
+    const quick = currentDay <= todayKey() ? quickFor(meal.id, items) : [];
+    quickMap[meal.id] = quick;
     const kcal = items.reduce((s, e) => s + scale(e.food, e.grams).k, 0);
     return `<section class="card meal">
       <div class="meal-head">
@@ -138,15 +147,73 @@ function renderToday() {
         <div class="meal-right"><span class="meal-kcal"><b>${r0(kcal).toLocaleString()}</b> kcal</span>
         <button class="add-btn" data-add="${meal.id}" aria-label="${meal.name} 추가">＋</button></div>
       </div>
+      ${quick.length ? `<div class="quick">${quick.map((q, i) => `<button class="chip ${q.type}" data-quick="${meal.id}:${i}">${esc(q.label)}</button>`).join('')}</div>` : ''}
       ${items.length ? '<div class="meal-items">' : ''}${items.map((e) => {
         const v = scale(e.food, e.grams);
         return `<div class="entry" data-entry="${e.id}">
           <div><div class="entry-name">${esc(e.food.n)}</div>
           <div class="entry-sub">${r0(e.grams)}g · 탄 ${r1(v.c)} · 단 ${r1(v.p)} · 지 ${r1(v.f)}${e.food.miss?.length ? ' · <span class="miss">일부 정보 없음</span>' : ''}</div></div>
           <div class="entry-kcal">${r0(v.k)} kcal</div></div>`;
-      }).join('')}${items.length ? '</div>' : ''}
+      }).join('')}${items.length ? `</div><div class="meal-foot"><button class="link-btn" data-saveset="${meal.id}">이 끼니를 세트로 저장</button></div>` : ''}
     </section>`;
   }).join('');
+
+  renderWeight();
+  renderBackupBanner();
+  renderSuggest();
+}
+
+// ---------- 끼니 바로가기: 세트 · 어제 그대로 · 자주 먹는 것 ----------
+let quickMap = {};
+function quickFor(meal, items) {
+  const out = [];
+  for (const set of state.sets.filter((x) => x.meal === meal).slice(0, 2)) {
+    out.push({ type: 'set', label: `▣ ${set.name}`, items: set.items });
+  }
+  const yItems = (state.log[addDays(currentDay, -1)] || []).filter((e) => e.meal === meal);
+  if (yItems.length && !items.length) {
+    out.push({ type: 'copy', label: `↻ 어제 그대로 (${yItems.length}개)`, items: yItems.map((e) => ({ grams: e.grams, food: e.food })) });
+  }
+  const have = new Set(items.map((e) => e.food.n));
+  for (const f of frequentFoods(meal)) {
+    if (out.length >= 6) break;
+    if (!have.has(f.food.n)) out.push({ type: 'food', label: `+ ${f.food.n}`, items: [f] });
+  }
+  return out;
+}
+// 최근 30일 동안 이 끼니에 2번 이상 먹은 음식 (많이 먹은 순)
+function frequentFoods(meal) {
+  const count = new Map();
+  for (let i = 1; i <= 30; i++) {
+    for (const e of state.log[addDays(currentDay, -i)] || []) {
+      if (e.meal !== meal) continue;
+      const c = count.get(e.food.n);
+      if (c) c.n++;
+      else count.set(e.food.n, { n: 1, last: i, grams: e.grams, food: e.food });
+    }
+  }
+  return [...count.values()].filter((c) => c.n >= 2).sort((a, b) => b.n - a.n || a.last - b.last).slice(0, 4);
+}
+function addEntries(meal, list, label) {
+  const day = (state.log[currentDay] ||= []);
+  for (const it of list) {
+    day.push({ id: uid(), meal, grams: it.grams, food: { ...it.food } });
+    state.recent = [{ ...it.food }, ...state.recent.filter((f) => f.n !== it.food.n)].slice(0, 30);
+  }
+  save(); closeSheets(); renderToday();
+  toast(`${label} 추가!`);
+  autoSync();
+}
+function saveSet(meal) {
+  const items = (state.log[currentDay] || []).filter((e) => e.meal === meal);
+  if (!items.length) return;
+  const mealName = MEALS.find((m) => m.id === meal).name;
+  const name = (prompt('세트 이름을 정해 주세요', `${mealName} 루틴`) || '').trim();
+  if (!name) return;
+  state.sets = [{ id: uid(), name, meal, items: items.map((e) => ({ grams: e.grams, food: { ...e.food } })) },
+    ...state.sets.filter((x) => x.name !== name)];
+  save(); renderToday();
+  toast(`"${name}" 세트를 저장했어요`);
 }
 
 $('#prev-day').onclick = () => { currentDay = addDays(currentDay, -1); renderToday(); };
@@ -155,6 +222,14 @@ $('#date-label').onclick = () => { currentDay = todayKey(); renderToday(); };
 $('#meals').onclick = (ev) => {
   const add = ev.target.closest('[data-add]');
   if (add) return openSearch(add.dataset.add);
+  const quick = ev.target.closest('[data-quick]');
+  if (quick) {
+    const [meal, i] = quick.dataset.quick.split(':');
+    const q = quickMap[meal][+i];
+    return addEntries(meal, q.items, q.type === 'food' ? q.items[0].food.n : q.label.replace(/^\S+ /, ''));
+  }
+  const ss = ev.target.closest('[data-saveset]');
+  if (ss) return saveSet(ss.dataset.saveset);
   const ent = ev.target.closest('[data-entry]');
   if (ent) {
     const e = (state.log[currentDay] || []).find((x) => x.id === ent.dataset.entry);
@@ -228,6 +303,7 @@ function searchFoods(raw) {
 
 function foodPool() {
   const q = $('#search-input').value.trim();
+  if (!q && searchTab === 'sets') return [];
   if (q) return searchFoods(q);
   if (searchTab === 'recent') return state.recent;
   if (searchTab === 'mine') return state.customFoods;
@@ -238,6 +314,17 @@ const macroText = (f, m, label) => (f.miss?.includes(m) ? `${label} <span class=
 function renderFoodList() {
   listedFoods = foodPool();
   const q = $('#search-input').value.trim();
+  if (!q && searchTab === 'sets') {
+    $('#food-list').innerHTML = state.sets.length
+      ? state.sets.map((set, i) => {
+        const k = set.items.reduce((sum, it) => sum + scale(it.food, it.grams).k, 0);
+        return `<button class="food-item" data-set="${i}"><div><div class="entry-name">▣ ${esc(set.name)}</div>
+          <div class="entry-sub">${esc(set.items.map((it) => it.food.n).join(', '))}</div></div>
+          <div class="entry-kcal">${r0(k)} kcal</div></button>`;
+      }).join('')
+      : '<div class="empty">끼니를 기록한 뒤 끼니 카드 아래 "이 끼니를 세트로 저장"을 누르면 여기에 생겨요</div>';
+    return;
+  }
   const emptyMsg = { recent: '아직 기록한 음식이 없어요', mine: '직접 입력한 음식이 여기에 저장돼요', all: '검색 결과가 없어요' }[searchTab];
   const dbNote = !q && searchTab === 'all' ? '<div class="empty">위에서 검색하면 음식·원재료 약 2만 개에서 찾아요</div>' : '';
   $('#food-list').innerHTML = listedFoods.length
@@ -251,6 +338,8 @@ let searchTimer;
 $('#search-input').oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(renderFoodList, 150); };
 $('#search-tabs').onclick = (ev) => { const b = ev.target.closest('button'); if (b) setSearchTab(b.dataset.tab); };
 $('#food-list').onclick = (ev) => {
+  const set = ev.target.closest('[data-set]');
+  if (set) { const x = state.sets[+set.dataset.set]; return addEntries(pendingMeal, x.items, x.name); }
   const b = ev.target.closest('[data-i]');
   if (b) openAmount(listedFoods[+b.dataset.i], pendingMeal);
 };
@@ -258,14 +347,14 @@ $('#food-list').onclick = (ev) => {
 // ---------- 양 선택 ----------
 let amountCtx = null; // { food, meal, entry }
 
-function openAmount(food, meal, entry = null) {
+function openAmount(food, meal, entry = null, grams = null) {
   amountCtx = { food, meal, entry };
   $('#amount-title').textContent = food.n;
   const unitName = !food.u || food.u === '1회 제공량' ? '1회' : food.u;
   $('#amount-unit').innerHTML = `1회 제공량: ${food.u && food.u !== '1회 제공량' ? esc(food.u) + ' = ' : ''}${r0(food.g)}g · ${r0(food.k)} kcal`
     + (food.miss?.length ? `<br><span class="miss">${food.miss.map((m) => ({ c: '탄수화물', p: '단백질', f: '지방' })[m]).join('·')} 정보가 없어서 0으로 계산돼요</span>` : '')
     + (food.src === '바코드' ? '<br><span class="small">누구나 고칠 수 있는 공개 DB(Open Food Facts) 정보예요. 포장지와 다르면 아래 "영양 정보 고치기"를 눌러 주세요.</span>' : '');
-  $('#amount-g').value = r1(entry ? entry.grams : food.g);
+  $('#amount-g').value = r1(grams ?? (entry ? entry.grams : food.g));
   $('#serving-chips').innerHTML = [0.5, 1, 1.5, 2, 3].map((x) => `<button data-x="${x}">${esc(unitName)}${x === 1 ? '' : ' ×' + x}</button>`).join('');
   $('#meal-select').innerHTML = MEALS.map((m) => `<button data-meal="${m.id}" class="${m.id === meal ? 'active' : ''}">${m.name}</button>`).join('');
   $('#amount-save').textContent = entry ? '수정' : '추가';
@@ -477,7 +566,11 @@ const METRIC = {
   c: { name: '탄수화물', unit: 'g', color: 'var(--c)', goal: () => state.goals.c, better: 'under' },
   p: { name: '단백질', unit: 'g', color: 'var(--p)', goal: () => state.goals.p, better: 'over' },
   f: { name: '지방', unit: 'g', color: 'var(--f)', goal: () => state.goals.f, better: 'under' },
+  w: { name: '체중', unit: 'kg', color: 'var(--w)', goal: () => null, better: null },
 };
+// 그래프에 쓸 날짜와 값 (체중은 따로 저장)
+const metricKeys = () => (trendMetric === 'w' ? Object.keys(state.weights) : Object.keys(state.log).filter(hasLog)).sort();
+const metricVal = (k) => (trendMetric === 'w' ? state.weights[k] : totalsFor(k)[trendMetric]);
 let weekOffset = 0, trendRange = '30', trendMetric = 'k';
 const hasLog = (k) => (state.log[k] || []).length > 0;
 const md = (k) => { const d = keyToDate(k); return `${d.getMonth() + 1}/${d.getDate()}`; };
@@ -528,10 +621,10 @@ $('#week-bars').onclick = (ev) => {
 // 추세 그래프
 function trendPoints() {
   const t = todayKey();
-  const keys = Object.keys(state.log).filter(hasLog).sort();
+  const keys = metricKeys();
   const start = trendRange === 'all' ? (keys[0] || t) : addDays(t, -(+trendRange - 1));
   const span = Math.round((keyToDate(t) - keyToDate(start)) / 864e5) + 1;
-  const daily = keys.filter((k) => k >= start && k <= t).map((k) => ({ k, v: totalsFor(k)[trendMetric] }));
+  const daily = keys.filter((k) => k >= start && k <= t).map((k) => ({ k, v: metricVal(k) }));
   if (span <= 120) return { start, span, weekly: false, pts: daily.map((d) => ({ ...d, x: (keyToDate(d.k) - keyToDate(start)) / 864e5 })) };
   // 기간이 길면 주 평균으로 묶음
   const byWeek = new Map();
@@ -555,32 +648,53 @@ function renderTrend() {
 
   // 요약 숫자 (하루 단위로 계산)
   const t = todayKey();
-  const days = Object.keys(state.log).filter((k) => hasLog(k) && k >= start && k <= t);
-  const vals = days.map((k) => totalsFor(k)[trendMetric]);
+  const isW = trendMetric === 'w';
+  const days = metricKeys().filter((k) => k >= start && k <= t);
+  const vals = days.map(metricVal);
   const avg = vals.length ? vals.reduce((s, v) => s + v, 0) / vals.length : 0;
-  const hit = vals.filter((v) => (m.better === 'over' ? v >= goal : v <= goal)).length;
-  $('#trend-stats').innerHTML = `
-    <div><b>${vals.length ? r0(avg).toLocaleString() : '–'}</b><span>평균 ${m.unit}</span></div>
-    <div><b>${vals.length}일</b><span>기록한 날</span></div>
-    <div><b>${vals.length ? hit + '일' : '–'}</b><span>목표 ${m.better === 'over' ? '이상' : '이하'}</span></div>`;
-  $('#trend-note').textContent = (weekly ? '점 하나 = 그 주에 기록한 날의 평균. ' : '점 하나 = 하루. ')
-    + '기록하지 않은 날은 비워 둬요. 가로선 = 목표.';
+  const fmt = (v) => (isW ? r1(v).toFixed(1) : r0(v).toLocaleString());
+  if (isW) {
+    const change = vals.length > 1 ? vals[vals.length - 1] - vals[0] : null;
+    $('#trend-stats').innerHTML = `
+      <div><b>${vals.length ? fmt(vals[vals.length - 1]) : '–'}</b><span>최근 kg</span></div>
+      <div><b>${change == null ? '–' : (change > 0 ? '+' : '') + r1(change).toFixed(1)}</b><span>기간 변화 kg</span></div>
+      <div><b>${vals.length}일</b><span>적은 날</span></div>`;
+    $('#trend-note').textContent = (weekly ? '점 하나 = 그 주 평균 체중. ' : '점 하나 = 체중을 적은 날. ') + '오늘 화면의 "체중" 칸에서 적어요.';
+  } else {
+    const hit = vals.filter((v) => (m.better === 'over' ? v >= goal : v <= goal)).length;
+    $('#trend-stats').innerHTML = `
+      <div><b>${vals.length ? fmt(avg) : '–'}</b><span>평균 ${m.unit}</span></div>
+      <div><b>${vals.length}일</b><span>기록한 날</span></div>
+      <div><b>${vals.length ? hit + '일' : '–'}</b><span>목표 ${m.better === 'over' ? '이상' : '이하'}</span></div>`;
+    $('#trend-note').textContent = (weekly ? '점 하나 = 그 주에 기록한 날의 평균. ' : '점 하나 = 하루. ')
+      + '기록하지 않은 날은 비워 둬요. 가로선 = 목표.';
+  }
 
   if (!pts.length) {
-    box.innerHTML = '<div class="empty">이 기간에 기록이 없어요. 음식을 기록하면 여기에 그래프가 그려져요.</div>';
+    box.innerHTML = `<div class="empty">${isW ? '이 기간에 적은 체중이 없어요. 오늘 화면의 "체중" 칸에 적으면 여기에 그려져요.' : '이 기간에 기록이 없어요. 음식을 기록하면 여기에 그래프가 그려져요.'}</div>`;
     return;
   }
 
   const W = Math.max(box.clientWidth, 260), H = 170, L = 38, R = 10, T = 12, B = 22;
-  const vmax = Math.max(goal * 1.15, ...pts.map((p) => p.v)) || 1;
-  const step = niceStep(vmax), top = Math.ceil(vmax / step) * step;
+  // 체중은 0부터가 아니라 기록 범위에 맞춰 확대
+  let bottom = 0, top, step;
+  if (isW) {
+    const lo = Math.min(...pts.map((p) => p.v)), hi = Math.max(...pts.map((p) => p.v));
+    step = niceStep(Math.max(hi - lo, 2));
+    bottom = Math.floor((lo - step / 2) / step) * step;
+    top = Math.ceil((hi + step / 2) / step) * step;
+  } else {
+    const vmax = Math.max(goal * 1.15, ...pts.map((p) => p.v)) || 1;
+    step = niceStep(vmax);
+    top = Math.ceil(vmax / step) * step;
+  }
   const sx = (x) => L + (span <= 1 ? (W - L - R) / 2 : (x / (span - 1)) * (W - L - R));
-  const sy = (v) => T + (1 - v / top) * (H - T - B);
+  const sy = (v) => T + (1 - (v - bottom) / (top - bottom)) * (H - T - B);
 
   let grid = '';
-  for (let v = 0; v <= top + 1e-9; v += step) {
+  for (let v = bottom; v <= top + 1e-9; v += step) {
     grid += `<line x1="${L}" x2="${W - R}" y1="${sy(v)}" y2="${sy(v)}" stroke="var(--line)" stroke-width="1"/>
-      <text x="${L - 6}" y="${sy(v) + 3}" text-anchor="end">${r0(v).toLocaleString()}</text>`;
+      <text x="${L - 6}" y="${sy(v) + 3}" text-anchor="end">${isW ? r1(v) : r0(v).toLocaleString()}</text>`;
   }
   const xl = [0, Math.floor((span - 1) / 2), span - 1].filter((v, i, a) => a.indexOf(v) === i);
   const ym = (k) => { const d = keyToDate(k); return `${String(d.getFullYear()).slice(2)}.${d.getMonth() + 1}`; };
@@ -596,16 +710,16 @@ function renderTrend() {
   const lines = runs.map((run) => {
     if (run.length === 1) return `<circle cx="${sx(run[0].x)}" cy="${sy(run[0].v)}" r="3" fill="${m.color}"/>`;
     const d = run.map((p, i) => `${i ? 'L' : 'M'}${sx(p.x).toFixed(1)},${sy(p.v).toFixed(1)}`).join('');
-    const area = `${d}L${sx(run[run.length - 1].x).toFixed(1)},${sy(0)}L${sx(run[0].x).toFixed(1)},${sy(0)}Z`;
+    const area = `${d}L${sx(run[run.length - 1].x).toFixed(1)},${sy(bottom)}L${sx(run[0].x).toFixed(1)},${sy(bottom)}Z`;
     return `<path d="${area}" fill="${m.color}" opacity=".1"/><path d="${d}" fill="none" stroke="${m.color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
   }).join('');
   const last = pts[pts.length - 1];
-  const goalY = sy(goal);
+  const goalLine = goal == null ? '' : `<line x1="${L}" x2="${W - R}" y1="${sy(goal)}" y2="${sy(goal)}" stroke="var(--text)" stroke-width="1" opacity=".55"/>
+    <text x="${W - R}" y="${sy(goal) - 4}" text-anchor="end">목표 ${r0(goal).toLocaleString()}</text>`;
 
   box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" height="${H}" role="img" aria-label="${m.name} 추세">
     ${grid}
-    <line x1="${L}" x2="${W - R}" y1="${goalY}" y2="${goalY}" stroke="var(--text)" stroke-width="1" opacity=".55"/>
-    <text x="${W - R}" y="${goalY - 4}" text-anchor="end">목표 ${r0(goal).toLocaleString()}</text>
+    ${goalLine}
     ${lines}
     <circle cx="${sx(last.x)}" cy="${sy(last.v)}" r="4.5" fill="${m.color}" stroke="var(--card)" stroke-width="2"/>
     ${xlab}
@@ -625,7 +739,7 @@ function renderTrend() {
     cross.setAttribute('x1', cx); cross.setAttribute('x2', cx); cross.setAttribute('visibility', 'visible');
     dot.setAttribute('cx', cx); dot.setAttribute('cy', cy); dot.setAttribute('visibility', 'visible');
     const when = weekly ? `${md(best.k)} 주 (${best.n}일 평균)` : `${md(best.k)} ${DOW[keyToDate(best.k).getDay()]}`;
-    tip.textContent = `${when} · ${r0(best.v).toLocaleString()} ${m.unit}`;
+    tip.textContent = `${when} · ${fmt(best.v)} ${m.unit}`;
     tip.hidden = false;
     const left = (cx / W) * rect.width;
     tip.style.left = `${Math.min(Math.max(left, 70), rect.width - 70)}px`;
@@ -647,6 +761,16 @@ function renderSettings() {
   updateGoalCalc();
   $('#widget-toggle').checked = state.widget;
   $('#autosync-toggle').checked = state.autoSync;
+  $('#remind-hour').value = String(state.remindHour);
+  $('#set-list').innerHTML = state.sets.length
+    ? state.sets.map((set, i) => `<div class="entry"><div><div class="entry-name">▣ ${esc(set.name)}
+        <span class="muted small">· ${MEALS.find((m) => m.id === set.meal).name}</span></div>
+        <div class="entry-sub">${esc(set.items.map((it) => it.food.n).join(', '))}</div></div>
+        <button class="del-x" data-delset="${i}">삭제</button></div>`).join('')
+    : '<p class="muted small">아직 없어요. 끼니를 기록한 뒤 끼니 카드 아래 "이 끼니를 세트로 저장"을 누르면 생겨요.</p>';
+  $('#last-backup').textContent = state.lastBackup
+    ? `마지막 백업: ${new Date(state.lastBackup).toLocaleDateString('ko-KR')}`
+    : '아직 백업한 적이 없어요.';
   prefetchScript();
   renderVersionInfo();
   $('#notify-toggle').checked = state.notify && notifPermission() === 'granted';
@@ -676,13 +800,199 @@ $('#custom-list').onclick = (ev) => {
   save(); renderSettings();
 };
 
-$('#export-btn').onclick = () => {
-  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `macho-backup-${todayKey()}.json`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+$('#set-list').onclick = (ev) => {
+  const b = ev.target.closest('[data-delset]');
+  if (!b) return;
+  const set = state.sets[+b.dataset.delset];
+  if (!confirm(`"${set.name}" 세트를 지울까요? (이미 기록한 건 그대로 남아요)`)) return;
+  state.sets.splice(+b.dataset.delset, 1);
+  save(); renderSettings();
+};
+$('#remind-hour').onchange = (ev) => { state.remindHour = +ev.target.value; save(); };
+
+// ---------- 백업 ----------
+// 공유 화면이 되면 "파일에 저장 → iCloud Drive"로, 안 되면 파일 내려받기
+async function doBackup() {
+  const name = `macho-backup-${todayKey()}.json`;
+  const json = JSON.stringify({ ...state, lastBackup: Date.now() }, null, 2);
+  try {
+    const file = new File([json], name, { type: 'application/json' });
+    const download = () => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+      a.download = name;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    };
+    if (navigator.canShare?.({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: 'Macho 백업' }); }
+      catch (e) { if (e.name === 'AbortError') throw e; download(); } // 공유가 막히면 내려받기
+    } else download();
+    state.lastBackup = Date.now();
+    save(); renderBackupBanner();
+    if (!$('#view-settings').hidden) renderSettings();
+    toast('백업했어요');
+  } catch (e) {
+    if (e.name !== 'AbortError') toast('백업하지 못했어요. 다시 눌러 주세요');
+  }
+}
+$('#export-btn').onclick = doBackup;
+const DAY_MS = 864e5;
+function renderBackupBanner() {
+  const loggedDays = Object.keys(state.log).filter(hasLog).length;
+  const since = state.lastBackup ? Math.floor((Date.now() - state.lastBackup) / DAY_MS) : null;
+  const due = loggedDays >= 3 && (since == null || since >= 7) && Date.now() > state.backupSnooze;
+  $('#backup-banner').hidden = !due;
+  if (due) {
+    $('#backup-banner-text').textContent = since == null
+      ? `${loggedDays}일 치 기록이 이 폰에만 있어요. iCloud Drive에 한 번 저장해 두세요.`
+      : `마지막 백업이 ${since}일 전이에요.`;
+  }
+}
+$('#backup-now').onclick = doBackup;
+$('#backup-later').onclick = () => { state.backupSnooze = Date.now() + 3 * DAY_MS; save(); renderBackupBanner(); };
+
+// ---------- 체중 ----------
+function renderWeight() {
+  const v = state.weights[currentDay];
+  const input = $('#weight-input');
+  if (document.activeElement !== input) input.value = v ?? '';
+  const prevKey = Object.keys(state.weights).filter((k) => k < currentDay).sort().pop();
+  const prev = prevKey ? state.weights[prevKey] : null;
+  $('#weight-diff').textContent = v != null && prev != null
+    ? `${labelFor(prevKey) === '어제' ? '어제' : md(prevKey)}보다 ${v - prev > 0 ? '+' : ''}${r1(v - prev).toFixed(1)}kg`
+    : v == null && prev != null ? `최근 ${r1(prev).toFixed(1)}kg` : '';
+}
+$('#weight-save').onclick = () => {
+  const raw = $('#weight-input').value.trim();
+  if (!raw) { delete state.weights[currentDay]; save(); renderWeight(); return toast('체중 기록을 지웠어요'); }
+  const kg = parseFloat(raw);
+  if (!(kg > 20 && kg < 300)) return toast('체중을 kg 단위로 입력해 주세요');
+  state.weights[currentDay] = r1(kg);
+  $('#weight-input').blur();
+  save(); renderWeight();
+  toast(`${r1(kg).toFixed(1)}kg 저장했어요`);
+};
+
+// ---------- 남은 양 채우기 추천 ----------
+const SHARE_MIN = { c: 0.45, p: 0.3, f: 0.45 }; // 그 영양소가 칼로리에서 차지하는 최소 비율
+let suggestList = [];
+function guessMeal() {
+  const h = new Date().getHours();
+  return h < 10 ? 'breakfast' : h < 15 ? 'lunch' : h >= 17 && h < 21 ? 'dinner' : 'snack';
+}
+function suggestions() {
+  const t = totalsFor(todayKey()), G = state.goals;
+  const R = { k: goalKcal() - t.k, c: G.c - t.c, p: G.p - t.p, f: G.f - t.f };
+  if (R.k < 80) return null;
+  // 목표 대비 가장 많이 모자란 영양소를 채우는 쪽으로
+  const target = ['p', 'c', 'f'].filter((m) => R[m] > 3).sort((a, b) => R[b] / (G[b] || 1) - R[a] / (G[a] || 1))[0];
+  if (!target) return null;
+  const pool = new Map();
+  const add = (f) => { if (f && f.g > 0 && f.k > 0 && !f.miss?.length && !pool.has(f.n)) pool.set(f.n, f); };
+  [...state.recent, ...state.customFoods, ...BASE_FOODS].forEach(add);
+  if (DB) for (const it of DB) if (it.r[1] === '음식' && it.r[4] != null && it.r[5] != null && it.r[6] != null) add(dbFood(it.r));
+  const mine = new Set([...state.recent, ...state.customFoods].map((f) => f.n));
+  const base = new Set(BASE_FOODS.map((f) => f.n));
+  // 하루 남은 양을 한 번에 채우지 않고 한 끼 분량(목표의 30%까지)만 채움
+  const want = Math.min(R[target], (G[target] || 0) * 0.3);
+  const kcalCap = Math.min(R.k, goalKcal() * 0.45);
+  const out = [];
+  for (const f of pool.values()) {
+    const rate = { k: f.k / f.g, c: f.c / f.g, p: f.p / f.g, f: f.f / f.g };
+    const share = ((target === 'f' ? 9 : 4) * rate[target]) / rate.k;
+    if (!(share >= SHARE_MIN[target])) continue;
+    // 식약처 음식은 1인분까지, 나머지는 1.5배까지
+    let x = Math.min(want / rate[target], f.g * (f.src ? 1 : 1.5), (kcalCap * 1.05) / rate.k);
+    // 보기 좋은 양으로: 단위가 있으면 0.5개 단위, 아니면 10g 단위
+    if (f.u && f.u !== '100g' && f.u !== '1회 제공량') x = Math.max(0.5, Math.round((x / f.g) * 2) / 2) * f.g;
+    else x = Math.max(10, Math.round(x / 10) * 10);
+    const got = { k: rate.k * x, c: rate.c * x, p: rate.p * x, f: rate.f * x };
+    if (got.k > kcalCap * 1.15) continue;
+    const fill = Math.min(got[target] / want, 1);
+    let over = 0;
+    for (const m of ['c', 'p', 'f']) if (m !== target) over += Math.max(0, got[m] - Math.max(R[m], 0)) / (G[m] || 1);
+    out.push({ f, x, got, score: fill - 2 * over + share * 0.3 + (mine.has(f.n) ? 0.3 : base.has(f.n) ? 0.2 : 0) });
+  }
+  out.sort((a, b) => b.score - a.score);
+  return { R, target, list: out.slice(0, 4) };
+}
+function renderSuggest() {
+  const card = $('#suggest-card');
+  if (currentDay !== todayKey()) { card.hidden = true; return; }
+  if (!DB) loadDB().then(() => { if (DB && currentDay === todayKey()) renderSuggest(); });
+  const res = suggestions();
+  if (!res || !res.list.length) { card.hidden = true; return; }
+  card.hidden = false;
+  const name = { c: '탄수화물', p: '단백질', f: '지방' };
+  const left = (m) => `${m === res.target ? '<b>' : ''}${{ c: '탄', p: '단', f: '지' }[m]} ${Math.max(0, r0(res.R[m]))}g${m === res.target ? '</b>' : ''}`;
+  $('#suggest-left').innerHTML = `남음 ${left('c')} · ${left('p')} · ${left('f')} · ${r0(res.R.k)}kcal`;
+  suggestList = res.list;
+  $('#suggest-list').innerHTML = res.list.map((s, i) => {
+    const amount = s.f.u && s.f.u !== '100g' && s.f.u !== '1회 제공량'
+      ? `${esc(s.f.u)} ×${r1(s.x / s.f.g)} (${r0(s.x)}g)` : `${r0(s.x)}g`;
+    return `<button class="food-item" data-sg="${i}"><div><div class="entry-name">${esc(s.f.n)}</div>
+      <div class="entry-sub">${amount} · <span class="fill">${name[res.target]} +${r0(s.got[res.target])}g</span> · 탄 ${r0(s.got.c)} · 단 ${r0(s.got.p)} · 지 ${r0(s.got.f)}</div></div>
+      <div class="entry-kcal">${r0(s.got.k)} kcal</div></button>`;
+  }).join('');
+}
+$('#suggest-list').onclick = (ev) => {
+  const b = ev.target.closest('[data-sg]');
+  if (!b) return;
+  const s = suggestList[+b.dataset.sg];
+  openAmount(s.f, guessMeal(), null, s.x);
+};
+
+// ---------- 목표 자동 계산 ----------
+const GC = { sex: 'm', goal: 'keep' };
+function openGoalCalc() {
+  const p = state.profile || {};
+  GC.sex = p.sex || 'm'; GC.goal = p.goal || 'keep';
+  const lastW = Object.keys(state.weights).sort().pop();
+  $('#gc-age').value = p.age ?? '';
+  $('#gc-h').value = p.h ?? '';
+  $('#gc-w').value = lastW ? state.weights[lastW] : p.w ?? '';
+  $('#gc-act').value = String(p.act || 1.55);
+  syncGcSeg();
+  calcGoal();
+  openSheet('goal-sheet');
+}
+function syncGcSeg() {
+  $$('#gc-sex button').forEach((b) => b.classList.toggle('active', b.dataset.v === GC.sex));
+  $$('#gc-goal button').forEach((b) => b.classList.toggle('active', b.dataset.v === GC.goal));
+}
+function calcGoal() {
+  const age = +$('#gc-age').value, h = +$('#gc-h').value, w = +$('#gc-w').value, act = +$('#gc-act').value;
+  if (!(age > 10 && h > 100 && w > 20)) {
+    $('#gc-result').innerHTML = '<div style="grid-column:1/-1" class="muted small">나이·키·몸무게를 넣으면 계산돼요</div>';
+    return null;
+  }
+  const bmr = 10 * w + 6.25 * h - 5 * age + (GC.sex === 'm' ? 5 : -161);
+  const kcal = bmr * act * { cut: 0.8, keep: 1, bulk: 1.1 }[GC.goal];
+  const p5 = (x) => Math.round(x / 5) * 5;
+  const p = p5(w * { cut: 2.0, keep: 1.6, bulk: 1.8 }[GC.goal]);
+  const f = p5((kcal * 0.25) / 9);
+  const c = Math.max(50, p5((kcal - p * 4 - f * 9) / 4));
+  $('#gc-result').innerHTML = `
+    <div><b>${r0(c * 4 + p * 4 + f * 9).toLocaleString()}</b><span>kcal</span></div>
+    <div><b style="color:var(--c)">${c}</b><span>탄수화물 g</span></div>
+    <div><b style="color:var(--p)">${p}</b><span>단백질 g</span></div>
+    <div><b style="color:var(--f)">${f}</b><span>지방 g</span></div>`;
+  return { c, p, f, profile: { sex: GC.sex, goal: GC.goal, age, h, w, act } };
+}
+$('#open-goal-calc').onclick = openGoalCalc;
+['#gc-age', '#gc-h', '#gc-w', '#gc-act'].forEach((sel) => ($(sel).oninput = calcGoal));
+$('#gc-act').onchange = calcGoal;
+$('#gc-sex').onclick = (ev) => { const b = ev.target.closest('[data-v]'); if (b) { GC.sex = b.dataset.v; syncGcSeg(); calcGoal(); } };
+$('#gc-goal').onclick = (ev) => { const b = ev.target.closest('[data-v]'); if (b) { GC.goal = b.dataset.v; syncGcSeg(); calcGoal(); } };
+$('#gc-apply').onclick = () => {
+  const res = calcGoal();
+  if (!res) return toast('나이·키·몸무게를 넣어 주세요');
+  state.goals = { c: res.c, p: res.p, f: res.f };
+  state.profile = res.profile;
+  save(); closeSheets(); renderSettings();
+  toast('목표를 바꿨어요');
+  autoSync();
 };
 $('#import-file').onchange = async (ev) => {
   const file = ev.target.files[0];
@@ -761,6 +1071,7 @@ function widgetQuery() {
     gc: r0(g.c), gp: r0(g.p), gf: r0(g.f),
     kb: mealKcal('breakfast'), kl: mealKcal('lunch'), kd: mealKcal('dinner'), ks: mealKcal('snack'),
     st: streakDays(),
+    rh: state.remindHour,
   }).toString();
 }
 function renderWidgetButton() {

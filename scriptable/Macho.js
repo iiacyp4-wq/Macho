@@ -3,7 +3,7 @@
 // icon-color: deep-green; icon-glyph: utensils;
 
 // Macho 칼로리 위젯 (원형)
-// 버전: v1.22
+// 버전: v1.24
 // 이 스크립트 이름을 반드시 "Macho" 로 저장하세요. (Macho 앱의 반영 버튼이 이 이름을 부르고,
 // 받은 숫자를 저장해서 MachoBar 위젯도 같이 씁니다)
 
@@ -20,7 +20,7 @@ function todayKey() {
 const q = args.queryParameters || {};
 if (q.d) {
   const data = { d: q.d, at: Date.now() };
-  for (const key of ['k', 'c', 'p', 'f', 'gc', 'gp', 'gf', 'kb', 'kl', 'kd', 'ks', 'st']) data[key] = Number(q[key]) || 0;
+  for (const key of ['k', 'c', 'p', 'f', 'gc', 'gp', 'gf', 'kb', 'kl', 'kd', 'ks', 'st', 'rh']) data[key] = Number(q[key]) || 0;
   fm.writeString(PATH, JSON.stringify(data));
 }
 
@@ -171,7 +171,38 @@ function inlineWidget(v) {
   return w;
 }
 
+// ---------- 기록 깜빡 알림 ----------
+// 위젯이 새로 고쳐질 때 확인: 정한 시각이 지났는데 오늘 반영된 기록이 없으면 하루 한 번 알림
+async function remind() {
+  let s = null;
+  try { if (fm.fileExists(PATH)) s = JSON.parse(fm.readString(PATH)); } catch (e) {}
+  const hour = s && s.rh != null ? s.rh : 21;
+  if (!hour || new Date().getHours() < hour) return;
+  if (s && s.d === todayKey() && s.k > 0) return;
+  const flag = fm.joinPath(fm.documentsDirectory(), 'macho-reminded.txt');
+  if (fm.fileExists(flag) && fm.readString(flag) === todayKey()) return;
+  fm.writeString(flag, todayKey());
+  const n = new Notification();
+  n.title = 'Macho';
+  n.body = '오늘 식단을 아직 기록하지 않았어요. 잊기 전에 적어 둘까요?';
+  await n.schedule();
+}
+// 처음 반영할 때 한 번 알림 권한을 받아 둠 (위젯 안에서는 권한을 물을 수 없어서)
+async function askNotifyOnce() {
+  const flag = fm.joinPath(fm.documentsDirectory(), 'macho-notify-ok.txt');
+  if (fm.fileExists(flag)) return;
+  fm.writeString(flag, '1');
+  const n = new Notification();
+  n.title = 'Macho';
+  n.body = '기록 깜빡 알림이 켜졌어요.';
+  await n.schedule();
+}
+
 // ---------- 실행 ----------
+try {
+  if (config.runsInWidget) await remind();
+  else if (q.d && Number(q.rh)) await askNotifyOnce();
+} catch (e) {}
 const v = read();
 const fam = config.widgetFamily || '';
 let widget;

@@ -11,6 +11,7 @@
   --danger: #dc2626;
   --over: #ef4444;
   --head: #e7f4eb;   /* 끼니 제목 띠 */
+  --w: #7c3aed;      /* 체중 그래프 */
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -20,6 +21,7 @@
     --muted: #9ca3af;
     --line: #273042;
     --head: #1a2b22;
+    --w: #a78bfa;
   }
 }
 [hidden] { display: none !important; }
@@ -150,6 +152,28 @@ h2 { font-size: 16px; margin: 0 0 12px; }
 .scan-frame { position: absolute; left: 12%; right: 12%; top: 32%; bottom: 32%; border: 3px solid var(--accent); border-radius: 12px; box-shadow: 0 0 0 999px rgba(0,0,0,.35); }
 .src { display: inline-block; font-size: 11px; padding: 0 6px; border-radius: 6px; background: var(--line); color: var(--muted); margin-right: 4px; vertical-align: 1px; }
 .miss { color: var(--over); }
+/* 끼니 바로가기 줄 (세트·어제 그대로·자주 먹는 것) */
+.quick { display: flex; gap: 6px; overflow-x: auto; padding: 8px 16px; scrollbar-width: none; }
+.quick::-webkit-scrollbar { display: none; }
+.chip { flex: none; border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 999px; padding: 6px 11px; font-size: 13px; white-space: nowrap; }
+.chip.set { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.chip.copy { background: var(--head); border-color: transparent; }
+.meal-foot { display: flex; justify-content: flex-end; padding: 0 16px 8px; }
+.link-btn { background: none; border: 0; color: var(--muted); font-size: 13px; padding: 4px 0; }
+/* 체중 */
+.weight-card { display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 16px; }
+.wc-label { font-weight: 700; }
+.wc-diff { flex: 1; font-size: 13px; color: var(--muted); }
+#weight-input { width: 84px; text-align: right; font-size: 17px; border: 1px solid var(--line); border-radius: 10px; padding: 7px 9px; background: var(--bg); }
+#weight-save { padding: 8px 14px; }
+/* 백업 알림 */
+.notice { display: grid; gap: 10px; border: 1px solid var(--accent); }
+/* 추천 */
+.sg-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.sg-head h2 { margin: 0; }
+#suggest-list .food-item { padding-left: 0; padding-right: 0; }
+.fill { color: var(--accent); font-weight: 600; }
+.field select { flex: 1; min-width: 0; text-align: right; text-align-last: right; border: 0; background: none; font-size: 16px; color: var(--text); }
 .seg { display: flex; background: var(--line); border-radius: 12px; padding: 3px; margin: 12px 0; }
 .seg button { flex: 1; border: 0; background: none; padding: 8px 0; border-radius: 10px; font-size: 14px; }
 .seg button.active { background: var(--card); font-weight: 700; box-shadow: 0 1px 3px rgba(0,0,0,.12); }

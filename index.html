@@ -46,9 +46,30 @@
       </div>
     </section>
 
+    <section class="card notice" id="backup-banner" hidden>
+      <div><b>백업할 때가 됐어요</b><div class="muted small" id="backup-banner-text"></div></div>
+      <div class="row">
+        <button class="btn primary" id="backup-now">지금 백업</button>
+        <button class="btn" id="backup-later">나중에</button>
+      </div>
+    </section>
+
     <a class="btn wide sync-btn" id="widget-sync" hidden></a>
 
+    <section class="card weight-card">
+      <span class="wc-label">체중</span>
+      <span class="wc-diff" id="weight-diff"></span>
+      <input type="number" inputmode="decimal" step="0.1" id="weight-input" placeholder="kg" aria-label="체중 (kg)">
+      <button class="btn" id="weight-save">저장</button>
+    </section>
+
     <div id="meals"></div>
+
+    <section class="card" id="suggest-card" hidden>
+      <div class="sg-head"><h2>남은 양 채우기</h2><span class="muted small" id="suggest-left"></span></div>
+      <div id="suggest-list"></div>
+      <p class="muted small">누르면 추천 양이 들어간 상태로 열려요. 양은 바꿀 수 있어요.</p>
+    </section>
   </main>
 
   <main id="view-history" class="view">
@@ -74,6 +95,7 @@
         <button data-metric="c">탄수화물</button>
         <button data-metric="p">단백질</button>
         <button data-metric="f">지방</button>
+        <button data-metric="w">체중</button>
       </div>
       <div class="trend-stats" id="trend-stats"></div>
       <div class="trend-chart" id="trend-chart"></div>
@@ -89,7 +111,10 @@
       <label class="field"><span>단백질 (g)</span><input type="number" inputmode="decimal" id="goal-p"></label>
       <label class="field"><span>지방 (g)</span><input type="number" inputmode="decimal" id="goal-f"></label>
       <p class="muted small">칼로리 목표 = 탄×4 + 단×4 + 지×9 = <b id="goal-kcal-calc">0</b> kcal</p>
-      <button class="btn primary" id="save-goals">목표 저장</button>
+      <div class="row">
+        <button class="btn primary" id="save-goals">목표 저장</button>
+        <button class="btn" id="open-goal-calc">내 몸에 맞게 자동 계산</button>
+      </div>
     </section>
 
     <section class="card">
@@ -109,6 +134,12 @@
       <a class="btn wide" href="preview.html">위젯 모양 미리보기</a>
       <label class="switch-row"><span>잠금화면 위젯 사용</span><input type="checkbox" switch id="widget-toggle"></label>
       <label class="switch-row"><span>기록하면 바로 반영<br><small class="muted">추가·수정·삭제할 때 Scriptable이 잠깐 열려요</small></span><input type="checkbox" switch id="autosync-toggle"></label>
+      <label class="field"><span>기록 깜빡 알림<br><small class="muted">이 시각까지 기록이 없으면 알려 줘요</small></span>
+        <select id="remind-hour">
+          <option value="0">끄기</option><option value="19">저녁 7시</option><option value="20">저녁 8시</option>
+          <option value="21">밤 9시</option><option value="22">밤 10시</option><option value="23">밤 11시</option>
+        </select></label>
+      <p class="muted small">알림은 Scriptable이 보내요. 처음 한 번 Scriptable이 알림 권한을 물으면 '허용'을 눌러 주세요. 위젯이 새로 고쳐질 때 확인해서, 정한 시각보다 조금 늦게 올 수 있어요.</p>
       <p class="muted small">위젯 숫자가 바뀌는 시점은 아이폰이 정해서, 반영 후 보통 몇 분 안에 바뀌어요.</p>
     </section>
 
@@ -120,13 +151,19 @@
     </section>
 
     <section class="card">
+      <h2>내 세트</h2>
+      <div id="set-list"></div>
+    </section>
+
+    <section class="card">
       <h2>내 음식</h2>
       <div id="custom-list"></div>
     </section>
 
     <section class="card">
       <h2>백업</h2>
-      <p class="muted small">기록은 이 폰의 브라우저 안에만 저장됩니다. 폰을 바꾸거나 브라우저 데이터를 지우기 전에 백업해 두세요.</p>
+      <p class="muted small">기록은 이 폰의 Macho 안에만 저장돼요. "백업 파일 저장"을 누르고 공유 화면에서 <b>파일에 저장 → iCloud Drive</b>를 고르면 폰을 바꿔도 되살릴 수 있어요. 7일 넘게 백업하지 않으면 오늘 화면에서 알려 줘요.</p>
+      <p class="muted small" id="last-backup"></p>
       <div class="row">
         <button class="btn" id="export-btn">백업 파일 저장</button>
         <label class="btn">불러오기<input type="file" id="import-file" accept="application/json" hidden></label>
@@ -159,6 +196,7 @@
       <button data-tab="recent" class="active">최근</button>
       <button data-tab="all">전체</button>
       <button data-tab="mine">내 음식</button>
+      <button data-tab="sets">세트</button>
     </div>
     <div class="food-list" id="food-list"></div>
     <button class="btn wide" id="custom-btn">＋ 직접 입력하기</button>
@@ -196,6 +234,30 @@
     <button class="btn primary wide" id="amount-save">추가</button>
     <button class="btn wide" id="amount-edit">영양 정보 고치기</button>
     <button class="btn danger wide" id="amount-delete" hidden>삭제</button>
+  </div>
+
+  <!-- 목표 자동 계산 시트 -->
+  <div class="sheet" id="goal-sheet" hidden>
+    <div class="sheet-head">
+      <button class="icon-btn" data-close aria-label="닫기">✕</button>
+      <h2>목표 자동 계산</h2>
+      <span></span>
+    </div>
+    <div class="seg" id="gc-sex"><button data-v="m" class="active">남성</button><button data-v="f">여성</button></div>
+    <label class="field"><span>나이</span><input type="number" inputmode="numeric" id="gc-age" placeholder="세"></label>
+    <label class="field"><span>키 (cm)</span><input type="number" inputmode="decimal" id="gc-h"></label>
+    <label class="field"><span>몸무게 (kg)</span><input type="number" inputmode="decimal" id="gc-w"></label>
+    <label class="field"><span>활동량</span>
+      <select id="gc-act">
+        <option value="1.2">거의 안 움직임</option>
+        <option value="1.375">가벼운 운동 (주 1~3회)</option>
+        <option value="1.55" selected>보통 운동 (주 3~5회)</option>
+        <option value="1.725">운동 많이 (주 6~7회)</option>
+      </select></label>
+    <div class="seg" id="gc-goal"><button data-v="cut">감량</button><button data-v="keep" class="active">유지</button><button data-v="bulk">증량</button></div>
+    <div class="preview" id="gc-result"></div>
+    <p class="muted small">기초대사량 공식(미플린-세인트 지어)과 활동량으로 계산한 추정치예요. 감량은 20% 적게, 증량은 10% 많게 잡고, 단백질은 몸무게 1kg당 감량 2.0g·유지 1.6g·증량 1.8g, 지방은 칼로리의 25%예요.</p>
+    <button class="btn primary wide" id="gc-apply">이 목표로 저장</button>
   </div>
 
   <!-- 직접 입력 시트 -->

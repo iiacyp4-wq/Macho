@@ -1,7 +1,7 @@
 'use strict';
 
 // 고칠 때마다 올리는 버전 (탭바 오른쪽 아래, 설정 맨 아래에 표시)
-const APP_VERSION = 'v1.22';
+const APP_VERSION = 'v1.23';
 
 const STORE_KEY = 'macho:v1';
 const MEALS = [
@@ -27,6 +27,7 @@ function defaultState() {
     notify: false,
     widget: false,   // 아이폰 Scriptable 잠금화면 위젯 사용
     widgetSent: '', // 마지막으로 위젯에 보낸 값
+    autoSync: true, // 기록이 바뀌면 바로 Scriptable을 열어 반영
   };
 }
 function load() {
@@ -308,11 +309,13 @@ $('#amount-save').onclick = () => {
   }
   save(); closeSheets(); renderToday();
   toast(entry ? '수정했어요' : `${food.n} 추가!`);
+  autoSync();
 };
 $('#amount-delete').onclick = () => {
   const { entry } = amountCtx;
   state.log[currentDay] = (state.log[currentDay] || []).filter((e) => e.id !== entry.id);
   save(); closeSheets(); renderToday(); toast('삭제했어요');
+  autoSync();
 };
 
 // ---------- 직접 입력 ----------
@@ -367,7 +370,7 @@ $('#cf-submit').onclick = () => {
     replaceFood(amountCtx.food, food);
     editCtx = null;
     save();
-    if (entry) { closeSheets(); renderToday(); return toast('고쳤어요'); }
+    if (entry) { closeSheets(); renderToday(); toast('고쳤어요'); return autoSync(); }
     return openAmount(food, meal);
   }
   save();
@@ -643,6 +646,7 @@ function renderSettings() {
   for (const m of MACROS) $(`#goal-${m.id}`).value = state.goals[m.id];
   updateGoalCalc();
   $('#widget-toggle').checked = state.widget;
+  $('#autosync-toggle').checked = state.autoSync;
   prefetchScript();
   renderVersionInfo();
   $('#notify-toggle').checked = state.notify && notifPermission() === 'granted';
@@ -661,6 +665,7 @@ MACROS.forEach((m) => ($(`#goal-${m.id}`).oninput = updateGoalCalc));
 $('#save-goals').onclick = () => {
   for (const m of MACROS) state.goals[m.id] = parseFloat($(`#goal-${m.id}`).value) || 0;
   save(); toast('목표를 저장했어요');
+  autoSync();
 };
 $('#custom-list').onclick = (ev) => {
   const b = ev.target.closest('[data-del]');
@@ -769,12 +774,24 @@ function renderWidgetButton() {
   btn.classList.toggle('pending', !done);
   btn.classList.toggle('done', done);
 }
+// 기록이 바뀌어 위젯에 보낼 값이 달라졌으면 Scriptable을 바로 엶
+// (iOS는 버튼을 누른 그 순간에만 다른 앱을 열 수 있어서, 저장 버튼 처리 안에서 부름)
+function autoSync() {
+  if (!state.widget || !state.autoSync) return;
+  const q = widgetQuery();
+  if (q === state.widgetSent) return;
+  state.widgetSent = q;
+  save();
+  renderWidgetButton();
+  location.href = `scriptable:///run/Macho?${q}`;
+}
 $('#widget-sync').onclick = () => {
   state.widgetSent = widgetQuery();
   save();
   setTimeout(renderWidgetButton, 300);
 };
 $('#widget-toggle').onchange = (ev) => { state.widget = ev.target.checked; save(); };
+$('#autosync-toggle').onchange = (ev) => { state.autoSync = ev.target.checked; save(); };
 
 const scriptTexts = {};
 function prefetchScript() {

@@ -1,5 +1,5 @@
 // 오프라인에서도 열리도록 파일을 저장해 두는 서비스워커
-const CACHE = 'macho-v21';
+const CACHE = 'macho-v22';
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'foods.js', 'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png', 'scriptable/Macho.js', 'scriptable/MachoBar.js', 'fooddb.json', 'vendor/zxing.min.js'];
 
 self.addEventListener('install', (e) => {

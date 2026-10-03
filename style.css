@@ -9,7 +9,8 @@
   --p: #3b82f6;
   --f: #ec4899;
   --danger: #dc2626;
-  --over: #ef4444;
+  --over: #ff0000;   /* 초과: 새빨간색 (2026-10-03) */
+  --track: #d1d5db;  /* 탄단지 막대의 안 채워진 부분 — 배경과 확실히 구분되게 */
   --head: #e7f4eb;   /* 끼니 제목 띠 */
   --w: #7c3aed;      /* 체중 그래프 */
 }
@@ -20,6 +21,7 @@
     --text: #f3f4f6;
     --muted: #9ca3af;
     --line: #273042;
+    --track: #3b4557;
     --head: #1a2b22;
     --w: #a78bfa;
   }
@@ -73,8 +75,9 @@ h2 { font-size: 16px; margin: 0 0 12px; }
 .side-stats b { font-size: 20px; }
 .macros { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
 .macro-top { display: flex; flex-direction: column; font-size: 13px; margin-bottom: 6px; }
-.macro-top .mv { color: var(--muted); font-size: 12px; }
-.bar { height: 8px; background: var(--line); border-radius: 4px; }
+.macro-top .mv { color: var(--text); font-size: 15px; font-weight: 600; margin-top: 2px; }
+.macro-top .mv-goal { color: var(--muted); font-size: 12px; font-weight: 400; }
+.bar { height: 8px; background: var(--track); border-radius: 4px; }
 .bar i { position: relative; display: block; height: 100%; width: 0; border-radius: 4px; transition: width .4s; }
 .bar i::after { content: ""; position: absolute; right: -6px; top: 50%; width: 12px; height: 12px; margin-top: -6px; box-sizing: border-box; border: 2px solid var(--card); border-radius: 50%; background: currentColor; animation: bar-pulse 1.8s ease-out infinite; }
 .bar i.zero::after { display: none; }
@@ -84,7 +87,8 @@ h2 { font-size: 16px; margin: 0 0 12px; }
 .macro[data-m="p"] .bar i { background: var(--p); color: var(--p); }
 .macro[data-m="f"] .bar i { background: var(--f); color: var(--f); }
 .over-text { color: var(--over); }
-.macro.over .mv { color: var(--over); font-weight: 700; }
+/* 초과하면 섭취 숫자만 빨갛게 (목표 숫자는 그대로) */
+.macro.over .mv-now { color: var(--over); font-weight: 800; }
 
 /* 식사 */
 .card.meal { padding: 0; overflow: hidden; }

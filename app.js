@@ -1,7 +1,7 @@
 'use strict';
 
 // 고칠 때마다 올리는 버전 (탭바 오른쪽 아래, 설정 맨 아래에 표시)
-const APP_VERSION = 'v1.24';
+const APP_VERSION = 'v1.25';
 
 const STORE_KEY = 'macho:v1';
 const MEALS = [
@@ -372,7 +372,27 @@ function updateAmountPreview() {
     <div><b style="color:var(--f)">${r1(v.f)}</b><span>지방</span></div>`;
   const x = g / amountCtx.food.g;
   $$('#serving-chips button').forEach((b) => b.classList.toggle('active', Math.abs(+b.dataset.x - x) < 0.001));
+  if (document.activeElement !== $('#amount-count')) $('#amount-count').value = r1(x);
+  $('#count-minus').disabled = x <= COUNT_MIN + 0.001;
+  $('#count-plus').disabled = x >= COUNT_MAX - 0.001;
 }
+const COUNT_MIN = 0.5, COUNT_MAX = 20;
+function setCount(x) {
+  x = Math.min(COUNT_MAX, Math.max(COUNT_MIN, Math.round(x * 2) / 2));
+  $('#amount-g').value = r1(amountCtx.food.g * x);
+  updateAmountPreview();
+  $('#amount-count').value = r1(x);
+}
+$('#count-minus').onclick = () => setCount((parseFloat($('#amount-count').value) || 1) - (parseFloat($('#amount-count').value) > 3 ? 1 : 0.5));
+$('#count-plus').onclick = () => setCount((parseFloat($('#amount-count').value) || 0) + (parseFloat($('#amount-count').value) >= 3 ? 1 : 0.5));
+$('#amount-count').oninput = () => {
+  const x = parseFloat($('#amount-count').value);
+  if (!(x > 0)) return;
+  if (x > COUNT_MAX) { toast('최대 20개까지 넣을 수 있어요'); $('#amount-count').value = COUNT_MAX; }
+  $('#amount-g').value = r1(amountCtx.food.g * Math.min(x, COUNT_MAX));
+  updateAmountPreview();
+};
+$('#amount-count').onchange = () => setCount(parseFloat($('#amount-count').value) || 1);
 $('#amount-g').oninput = updateAmountPreview;
 $('#serving-chips').onclick = (ev) => {
   const b = ev.target.closest('[data-x]');

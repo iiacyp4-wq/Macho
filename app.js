@@ -1,7 +1,7 @@
 'use strict';
 
 // 고칠 때마다 올리는 버전 (탭바 오른쪽 아래, 설정 맨 아래에 표시)
-const APP_VERSION = 'v1.26';
+const APP_VERSION = 'v1.27';
 
 const STORE_KEY = 'macho:v1';
 const MEALS = [
@@ -150,10 +150,11 @@ function renderToday() {
       ${quick.length ? `<div class="quick">${quick.map((q, i) => `<button class="chip ${q.type}" data-quick="${meal.id}:${i}">${esc(q.label)}</button>`).join('')}</div>` : ''}
       ${items.length ? '<div class="meal-items">' : ''}${items.map((e) => {
         const v = scale(e.food, e.grams);
-        return `<div class="entry" data-entry="${e.id}">
+        return `<div class="swipe-row"><button class="entry-del" data-del-entry="${e.id}" aria-label="${esc(e.food.n)} 삭제">−</button>
+          <div class="entry" data-entry="${e.id}">
           <div><div class="entry-name">${esc(e.food.n)}</div>
           <div class="entry-sub">${r0(e.grams)}g · 탄 ${r1(v.c)} · 단 ${r1(v.p)} · 지 ${r1(v.f)}${e.food.miss?.length ? ' · <span class="miss">일부 정보 없음</span>' : ''}</div></div>
-          <div class="entry-kcal">${r0(v.k)} kcal</div></div>`;
+          <div class="entry-kcal">${r0(v.k)} kcal</div></div></div>`;
       }).join('')}${items.length ? `</div><div class="meal-foot"><button class="link-btn" data-saveset="${meal.id}">이 끼니를 세트로 저장</button></div>` : ''}
     </section>`;
   }).join('');
@@ -230,12 +231,69 @@ $('#meals').onclick = (ev) => {
   }
   const ss = ev.target.closest('[data-saveset]');
   if (ss) return saveSet(ss.dataset.saveset);
+  const del = ev.target.closest('[data-del-entry]');
+  if (del) return deleteEntry(del.dataset.delEntry);
   const ent = ev.target.closest('[data-entry]');
+  if (ent && Date.now() - swipedAt < 400) return; // 밀기·닫기 직후의 탭은 수정 창을 열지 않음
+  if (ent && openRow && ent.parentElement === openRow) return closeRow();
   if (ent) {
     const e = (state.log[currentDay] || []).find((x) => x.id === ent.dataset.entry);
     if (e) openAmount(e.food, e.meal, e);
   }
 };
+
+// ---------- 먹은 음식: 왼쪽으로 밀고 − 눌러 삭제 ----------
+const DEL_W = 72;
+let swipe = null, openRow = null, swipedAt = 0;
+function setRowX(row, x, anim) {
+  const el = row.querySelector('.entry');
+  el.style.transition = anim ? 'transform .2s ease' : 'none';
+  el.style.transform = x ? `translateX(${x}px)` : '';
+}
+function closeRow() {
+  if (!openRow) return;
+  setRowX(openRow, 0, true);
+  openRow = null; swipedAt = Date.now();
+}
+function deleteEntry(id) {
+  openRow = null;
+  state.log[currentDay] = (state.log[currentDay] || []).filter((e) => e.id !== id);
+  save(); renderToday(); toast('삭제했어요');
+  autoSync();
+}
+document.addEventListener('touchstart', (ev) => {
+  if (openRow && !openRow.contains(ev.target)) closeRow();
+}, { passive: true, capture: true });
+$('#meals').addEventListener('touchstart', (ev) => {
+  const row = ev.target.closest('.swipe-row');
+  if (!row || ev.target.closest('.entry-del')) { swipe = null; return; }
+  const t = ev.touches[0];
+  swipe = { row, x0: t.clientX, y0: t.clientY, base: row === openRow ? -DEL_W : 0, x: 0, dir: null };
+}, { passive: true });
+$('#meals').addEventListener('touchmove', (ev) => {
+  if (!swipe) return;
+  const t = ev.touches[0], dx = t.clientX - swipe.x0, dy = t.clientY - swipe.y0;
+  if (!swipe.dir) {
+    if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+    swipe.dir = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+  }
+  if (swipe.dir !== 'x') return;
+  ev.preventDefault(); // 옆으로 미는 동안 화면이 위아래로 움직이지 않게
+  swipe.x = Math.max(-DEL_W * 1.4, Math.min(0, swipe.base + dx));
+  setRowX(swipe.row, swipe.x, false);
+}, { passive: false });
+const endSwipe = () => {
+  if (!swipe) return;
+  if (swipe.dir === 'x') {
+    const open = swipe.x < -DEL_W / 2;
+    setRowX(swipe.row, open ? -DEL_W : 0, true);
+    openRow = open ? swipe.row : null;
+    swipedAt = Date.now();
+  }
+  swipe = null;
+};
+$('#meals').addEventListener('touchend', endSwipe);
+$('#meals').addEventListener('touchcancel', endSwipe);
 
 // ---------- 시트 공통 ----------
 function openSheet(id) { $$('.sheet').forEach((s) => (s.hidden = s.id !== id)); }
@@ -421,10 +479,8 @@ $('#amount-save').onclick = () => {
   autoSync();
 };
 $('#amount-delete').onclick = () => {
-  const { entry } = amountCtx;
-  state.log[currentDay] = (state.log[currentDay] || []).filter((e) => e.id !== entry.id);
-  save(); closeSheets(); renderToday(); toast('삭제했어요');
-  autoSync();
+  closeSheets();
+  deleteEntry(amountCtx.entry.id);
 };
 
 // ---------- 직접 입력 ----------

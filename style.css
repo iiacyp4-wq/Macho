@@ -109,6 +109,12 @@ h2 { font-size: 16px; margin: 0 0 12px; }
 .entry-name { font-weight: 600; }
 .entry-sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
 .entry-kcal { white-space: nowrap; font-weight: 600; }
+/* 먹은 음식: 왼쪽으로 밀면 오른쪽에 빨간 − 버튼 */
+.swipe-row { position: relative; overflow: hidden; border-top: 1px solid var(--line); }
+.meal-items .swipe-row:first-child { border-top: 0; }
+.swipe-row .entry { position: relative; z-index: 1; margin-top: 0; border-top: 0; background: var(--card); touch-action: pan-y; will-change: transform; }
+.swipe-row [data-haptic-trigger] { touch-action: pan-y; }
+.entry-del { position: absolute; top: 0; right: 0; bottom: 0; width: 72px; border: 0; background: var(--danger); color: #fff; font-size: 30px; font-weight: 700; line-height: 1; }
 
 /* 기록 */
 .hist-row { display: grid; grid-template-columns: 54px 1fr 64px; align-items: center; gap: 8px; padding: 8px 0; font-size: 14px; }

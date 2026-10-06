@@ -234,3 +234,11 @@ h2 { font-size: 16px; margin: 0 0 12px; }
 .del-x { border: 0; background: none; color: var(--danger); font-size: 14px; padding: 6px; }
 
 .toast { position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: #111827; color: #fff; padding: 10px 16px; border-radius: 999px; font-size: 14px; z-index: 20; white-space: nowrap; }
+
+/* 모아서 확정하기 바 (탭바 바로 위) */
+.confirm-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(66px + env(safe-area-inset-bottom)); width: calc(100% - 32px); max-width: 528px; display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--accent); color: #fff; text-decoration: none; padding: 14px 18px; border-radius: 14px; font-size: 15px; box-shadow: 0 6px 18px rgba(0,0,0,.18); z-index: 6; }
+.confirm-bar[hidden] { display: none; }
+.confirm-bar b { white-space: nowrap; }
+body.has-confirm { padding-bottom: calc(136px + env(safe-area-inset-bottom)); }
+body.has-confirm .toast { bottom: calc(140px + env(safe-area-inset-bottom)); }
+.new-tag { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 6px; background: var(--accent); color: #fff; font-size: 10px; font-weight: 700; vertical-align: 2px; }

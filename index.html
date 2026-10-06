@@ -133,7 +133,7 @@
       </div>
       <a class="btn wide" href="preview.html">위젯 모양 미리보기</a>
       <label class="switch-row"><span>잠금화면 위젯 사용</span><input type="checkbox" switch id="widget-toggle"></label>
-      <label class="switch-row"><span>기록하면 바로 반영<br><small class="muted">추가·수정·삭제할 때 Scriptable이 잠깐 열려요</small></span><input type="checkbox" switch id="autosync-toggle"></label>
+      <label class="switch-row"><span>모아서 확정하기<br><small class="muted">여러 개 넣은 뒤 아래 확정 바를 누르면 Scriptable이 한 번만 열려요</small></span><input type="checkbox" switch id="autosync-toggle"></label>
       <label class="field"><span>기록 깜빡 알림<br><small class="muted">이 시각까지 기록이 없으면 알려 줘요</small></span>
         <select id="remind-hour">
           <option value="0">끄기</option><option value="19">저녁 7시</option><option value="20">저녁 8시</option>
@@ -173,6 +173,8 @@
     <p class="muted small center" id="version-info"></p>
     <p class="muted small center">음식 데이터: 식품의약품안전처 식품영양성분 DB, 농촌진흥청 국가표준식품성분표<br>바코드 데이터: Open Food Facts (ODbL)</p>
   </main>
+
+  <a class="confirm-bar" id="confirm-bar" hidden><span id="confirm-count"></span><b>확정 · 잠금화면 반영</b></a>
 
   <nav class="tabbar">
     <span class="app-version" id="app-version"></span>

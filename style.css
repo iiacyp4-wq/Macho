@@ -246,3 +246,4 @@ h2 { font-size: 16px; margin: 0 0 12px; }
 .cart-item button { border: 0; background: none; color: var(--muted); width: 22px; height: 22px; padding: 0; font-size: 12px; }
 .cart .btn.wide { margin-top: 4px; }
 body:has(#search-sheet:not([hidden]) .cart:not([hidden])) .toast { bottom: auto; top: calc(env(safe-area-inset-top) + 64px); }
+#cart-commit { text-decoration: none; }

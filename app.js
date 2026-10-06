@@ -1,7 +1,7 @@
 'use strict';
 
 // 고칠 때마다 올리는 버전 (탭바 오른쪽 아래, 설정 맨 아래에 표시)
-const APP_VERSION = 'v1.29';
+const APP_VERSION = 'v1.30';
 
 const STORE_KEY = 'macho:v1';
 const MEALS = [
@@ -440,7 +440,9 @@ $('#cart-list').onclick = (ev) => {
   cart.splice(+b.dataset.uncart, 1);
   renderCart();
 };
-$('#cart-commit').onclick = () => {
+// 식단 기록 버튼은 링크(<a>)라서, 누르는 순간 href를 Scriptable 주소로 바꿔 두면 iOS가 손가락으로 연 것으로 보고
+// 왼쪽 위에 "◀ Macho" 돌아가기를 띄움 (location.href로 열면 이게 안 뜰 때가 있음)
+$('#cart-commit').onclick = (ev) => {
   const day = (state.log[currentDay] ||= []);
   for (const it of cart) {
     day.push({ id: uid(), meal: it.meal, grams: it.grams, food: { ...it.food } });
@@ -449,7 +451,9 @@ $('#cart-commit').onclick = () => {
   const n = cart.length;
   save(); closeSheets(); renderToday();
   toast(`${n}개 기록했어요!`);
-  autoSync();
+  const url = syncUrl();
+  if (url) ev.currentTarget.href = url;
+  else ev.preventDefault();
 };
 
 // ---------- 양 선택 ----------
@@ -1219,13 +1223,18 @@ function renderWidgetButton() {
 // 기록이 바뀌어 위젯에 보낼 값이 달라졌으면 Scriptable을 바로 엶
 // (iOS는 버튼을 누른 그 순간에만 다른 앱을 열 수 있어서, 저장 버튼 처리 안에서 부름)
 function autoSync() {
-  if (!state.widget || !state.autoSync) return;
+  const url = syncUrl();
+  if (url) location.href = url;
+}
+// 위젯에 보낼 값이 바뀌었으면 보낸 걸로 표시하고 Scriptable 주소를 돌려줌 (아니면 '')
+function syncUrl() {
+  if (!state.widget || !state.autoSync) return '';
   const q = widgetQuery();
-  if (q === state.widgetSent) return;
+  if (q === state.widgetSent) return '';
   state.widgetSent = q;
   save();
   renderWidgetButton();
-  location.href = `scriptable:///run/Macho?${q}`;
+  return `scriptable:///run/Macho?${q}`;
 }
 $('#widget-sync').onclick = () => {
   state.widgetSent = widgetQuery();

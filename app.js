@@ -1,7 +1,7 @@
 'use strict';
 
 // 고칠 때마다 올리는 버전 (탭바 오른쪽 아래, 설정 맨 아래에 표시)
-const APP_VERSION = 'v1.28';
+const APP_VERSION = 'v1.29';
 
 const STORE_KEY = 'macho:v1';
 const MEALS = [
@@ -27,7 +27,7 @@ function defaultState() {
     notify: false,
     widget: false,   // 아이폰 Scriptable 잠금화면 위젯 사용
     widgetSent: '', // 마지막으로 위젯에 보낸 값
-    autoSync: true, // 기록이 바뀌면 아래에 확정 바를 띄우고, 누르면 Scriptable을 열어 반영
+    autoSync: true, // 기록이 바뀌면 바로 Scriptable을 열어 반영
     sets: [],       // [{ id, name, meal, items: [{ grams, food }] }] 한 번에 추가하는 묶음
     weights: {},    // { 'YYYY-MM-DD': kg }
     profile: null,  // 목표 자동 계산에 넣은 값
@@ -96,7 +96,6 @@ function toast(msg) {
 
 // ---------- 오늘 화면 ----------
 let currentDay = todayKey();
-let pendingAdds = new Set(); // 확정 전에 오늘 새로 넣은 기록 id (아래 확정 바에 개수 표시)
 const RING_LEN = 2 * Math.PI * 52;
 
 function renderToday() {
@@ -153,7 +152,7 @@ function renderToday() {
         const v = scale(e.food, e.grams);
         return `<div class="swipe-row"><button class="entry-del" data-del-entry="${e.id}" aria-label="${esc(e.food.n)} 삭제">−</button>
           <div class="entry" data-entry="${e.id}">
-          <div><div class="entry-name">${esc(e.food.n)}${pendingAdds.has(e.id) ? '<span class="new-tag">NEW</span>' : ''}</div>
+          <div><div class="entry-name">${esc(e.food.n)}</div>
           <div class="entry-sub">${r0(e.grams)}g · 탄 ${r1(v.c)} · 단 ${r1(v.p)} · 지 ${r1(v.f)}${e.food.miss?.length ? ' · <span class="miss">일부 정보 없음</span>' : ''}</div></div>
           <div class="entry-kcal">${r0(v.k)} kcal</div></div></div>`;
       }).join('')}${items.length ? `</div><div class="meal-foot"><button class="link-btn" data-saveset="${meal.id}">이 끼니를 세트로 저장</button></div>` : ''}
@@ -199,14 +198,12 @@ function frequentFoods(meal) {
 function addEntries(meal, list, label) {
   const day = (state.log[currentDay] ||= []);
   for (const it of list) {
-    const id = uid();
-    day.push({ id, meal, grams: it.grams, food: { ...it.food } });
-    if (currentDay === todayKey()) pendingAdds.add(id);
+    day.push({ id: uid(), meal, grams: it.grams, food: { ...it.food } });
     state.recent = [{ ...it.food }, ...state.recent.filter((f) => f.n !== it.food.n)].slice(0, 30);
   }
   save(); closeSheets(); renderToday();
   toast(`${label} 추가!`);
-  renderConfirmBar();
+  autoSync();
 }
 function saveSet(meal) {
   const items = (state.log[currentDay] || []).filter((e) => e.meal === meal);
@@ -260,10 +257,9 @@ function closeRow() {
 }
 function deleteEntry(id) {
   openRow = null;
-  pendingAdds.delete(id);
   state.log[currentDay] = (state.log[currentDay] || []).filter((e) => e.id !== id);
   save(); renderToday(); toast('삭제했어요');
-  renderConfirmBar();
+  autoSync();
 }
 document.addEventListener('touchstart', (ev) => {
   if (openRow && !openRow.contains(ev.target)) closeRow();
@@ -301,15 +297,24 @@ $('#meals').addEventListener('touchcancel', endSwipe);
 
 // ---------- 시트 공통 ----------
 function openSheet(id) { $$('.sheet').forEach((s) => (s.hidden = s.id !== id)); }
-function closeSheets() { stopScan(); $$('.sheet').forEach((s) => (s.hidden = true)); }
-$$('[data-close]').forEach((b) => (b.onclick = closeSheets));
+function closeSheets() { stopScan(); cart = null; $$('.sheet').forEach((s) => (s.hidden = true)); }
+// 음식을 담는 중이면 ✕는 검색 창으로 돌아가고, 검색 창의 ✕는 담은 걸 버릴지 물어봄
+$$('[data-close]').forEach((b) => (b.onclick = () => {
+  if (!cart) return closeSheets();
+  if (b.closest('.sheet').id !== 'search-sheet') return backToSearch();
+  if (cart.length && !confirm(`담은 음식 ${cart.length}개를 기록하지 않고 닫을까요?`)) return;
+  closeSheets();
+}));
 
 // ---------- 검색 ----------
 let pendingMeal = 'breakfast';
 let searchTab = 'recent';
+let cart = null; // 검색 창에서 담아 둔 음식 [{ meal, grams, food }] — "식단 기록"을 눌러야 기록됨
 
 function openSearch(meal) {
   pendingMeal = meal;
+  cart = [];
+  renderCart();
   $('#search-title').textContent = `${MEALS.find((m) => m.id === meal).name}에 추가`;
   $('#search-input').value = '';
   setSearchTab(state.recent.length ? 'recent' : 'all');
@@ -401,9 +406,50 @@ $('#search-input').oninput = () => { clearTimeout(searchTimer); searchTimer = se
 $('#search-tabs').onclick = (ev) => { const b = ev.target.closest('button'); if (b) setSearchTab(b.dataset.tab); };
 $('#food-list').onclick = (ev) => {
   const set = ev.target.closest('[data-set]');
-  if (set) { const x = state.sets[+set.dataset.set]; return addEntries(pendingMeal, x.items, x.name); }
+  if (set) {
+    const x = state.sets[+set.dataset.set];
+    cart.push(...x.items.map((it) => ({ meal: pendingMeal, grams: it.grams, food: { ...it.food } })));
+    toast(`"${x.name}" ${x.items.length}개 담았어요`);
+    return backToSearch();
+  }
   const b = ev.target.closest('[data-i]');
   if (b) openAmount(listedFoods[+b.dataset.i], pendingMeal);
+};
+
+// ---------- 담은 음식 → 한꺼번에 기록 ----------
+function backToSearch() {
+  stopScan();
+  $('#search-input').value = '';
+  renderFoodList();
+  renderCart();
+  openSheet('search-sheet');
+}
+function renderCart() {
+  const box = $('#cart');
+  box.hidden = !cart?.length;
+  if (box.hidden) return;
+  const k = cart.reduce((sum, it) => sum + scale(it.food, it.grams).k, 0);
+  $('#cart-list').innerHTML = MEALS.filter((m) => cart.some((it) => it.meal === m.id)).map((m) => `
+    <div class="cart-meal"><b>${m.name}</b>${cart.map((it, i) => (it.meal !== m.id ? '' : `
+      <span class="cart-item">${esc(it.food.n)} <small>${r0(it.grams)}g</small><button data-uncart="${i}" aria-label="${esc(it.food.n)} 빼기">✕</button></span>`)).join('')}</div>`).join('');
+  $('#cart-commit').textContent = `식단 기록 (${cart.length}개 · ${r0(k).toLocaleString()} kcal)`;
+}
+$('#cart-list').onclick = (ev) => {
+  const b = ev.target.closest('[data-uncart]');
+  if (!b) return;
+  cart.splice(+b.dataset.uncart, 1);
+  renderCart();
+};
+$('#cart-commit').onclick = () => {
+  const day = (state.log[currentDay] ||= []);
+  for (const it of cart) {
+    day.push({ id: uid(), meal: it.meal, grams: it.grams, food: { ...it.food } });
+    state.recent = [{ ...it.food }, ...state.recent.filter((f) => f.n !== it.food.n)].slice(0, 30);
+  }
+  const n = cart.length;
+  save(); closeSheets(); renderToday();
+  toast(`${n}개 기록했어요!`);
+  autoSync();
 };
 
 // ---------- 양 선택 ----------
@@ -419,7 +465,7 @@ function openAmount(food, meal, entry = null, grams = null) {
   $('#amount-g').value = r1(grams ?? (entry ? entry.grams : food.g));
   $('#serving-chips').innerHTML = [0.5, 1, 1.5, 2, 3].map((x) => `<button data-x="${x}">${esc(unitName)}${x === 1 ? '' : ' ×' + x}</button>`).join('');
   $('#meal-select').innerHTML = MEALS.map((m) => `<button data-meal="${m.id}" class="${m.id === meal ? 'active' : ''}">${m.name}</button>`).join('');
-  $('#amount-save').textContent = entry ? '수정' : '추가';
+  $('#amount-save').textContent = entry ? '수정' : cart ? '담기' : '추가';
   $('#amount-delete').hidden = !entry;
   updateAmountPreview();
   openSheet('amount-sheet');
@@ -472,17 +518,20 @@ $('#amount-save').onclick = () => {
   const grams = parseFloat($('#amount-g').value);
   if (!(grams > 0)) return toast('양을 입력해 주세요');
   const { food, meal, entry } = amountCtx;
+  if (!entry && cart) {
+    cart.push({ meal, grams, food: { ...food } });
+    toast(`${MEALS.find((m) => m.id === meal).name}에 ${food.n} 담았어요`);
+    return backToSearch();
+  }
   if (entry) {
     entry.grams = grams; entry.meal = meal;
   } else {
-    const id = uid();
-    (state.log[currentDay] ||= []).push({ id, meal, grams, food: { ...food } });
-    if (currentDay === todayKey()) pendingAdds.add(id);
+    (state.log[currentDay] ||= []).push({ id: uid(), meal, grams, food: { ...food } });
     state.recent = [{ ...food }, ...state.recent.filter((f) => f.n !== food.n)].slice(0, 30);
   }
   save(); closeSheets(); renderToday();
   toast(entry ? '수정했어요' : `${food.n} 추가!`);
-  renderConfirmBar();
+  autoSync();
 };
 $('#amount-delete').onclick = () => {
   closeSheets();
@@ -541,7 +590,7 @@ $('#cf-submit').onclick = () => {
     replaceFood(amountCtx.food, food);
     editCtx = null;
     save();
-    if (entry) { closeSheets(); renderToday(); toast('고쳤어요'); return renderConfirmBar(); }
+    if (entry) { closeSheets(); renderToday(); toast('고쳤어요'); return autoSync(); }
     return openAmount(food, meal);
   }
   save();
@@ -871,7 +920,7 @@ MACROS.forEach((m) => ($(`#goal-${m.id}`).oninput = updateGoalCalc));
 $('#save-goals').onclick = () => {
   for (const m of MACROS) state.goals[m.id] = parseFloat($(`#goal-${m.id}`).value) || 0;
   save(); toast('목표를 저장했어요');
-  renderConfirmBar();
+  autoSync();
 };
 $('#custom-list').onclick = (ev) => {
   const b = ev.target.closest('[data-del]');
@@ -1074,7 +1123,7 @@ $('#gc-apply').onclick = () => {
   state.profile = res.profile;
   save(); closeSheets(); renderSettings();
   toast('목표를 바꿨어요');
-  renderConfirmBar();
+  autoSync();
 };
 $('#import-file').onchange = async (ev) => {
   const file = ev.target.files[0];
@@ -1157,42 +1206,34 @@ function widgetQuery() {
   }).toString();
 }
 function renderWidgetButton() {
-  renderConfirmBar();
   const btn = $('#widget-sync');
+  btn.hidden = !state.widget;
+  if (!state.widget) return;
   const q = widgetQuery();
   const done = q === state.widgetSent;
-  btn.hidden = !state.widget || (state.autoSync && !done); // 확정 바가 떠 있으면 위 버튼은 숨김
-  if (btn.hidden) return;
   btn.href = `scriptable:///run/Macho?${q}`;
   btn.textContent = done ? '✓ 잠금화면에 반영됨' : '🔒 잠금화면에 반영';
   btn.classList.toggle('pending', !done);
   btn.classList.toggle('done', done);
 }
-// 여러 개를 넣고 한 번에 확정: 기록이 바뀌면 아래에 확정 바를 띄우고, 누르면 그때 Scriptable을 엶
-// (iOS는 손가락으로 누른 링크로만 다른 앱을 열 수 있어서 바 자체를 scriptable:// 링크로 둠)
-function renderConfirmBar() {
-  const bar = $('#confirm-bar');
-  const q = state.widget && state.autoSync ? widgetQuery() : '';
-  const show = !!q && q !== state.widgetSent;
-  bar.hidden = !show;
-  document.body.classList.toggle('has-confirm', show);
-  if (!show) { pendingAdds.clear(); return; }
-  bar.href = `scriptable:///run/Macho?${q}`;
-  $('#confirm-count').textContent = pendingAdds.size ? `${pendingAdds.size}개 담았어요` : '바뀐 기록이 있어요';
-}
-$('#confirm-bar').onclick = () => {
-  state.widgetSent = widgetQuery();
-  pendingAdds.clear();
+// 기록이 바뀌어 위젯에 보낼 값이 달라졌으면 Scriptable을 바로 엶
+// (iOS는 버튼을 누른 그 순간에만 다른 앱을 열 수 있어서, 저장 버튼 처리 안에서 부름)
+function autoSync() {
+  if (!state.widget || !state.autoSync) return;
+  const q = widgetQuery();
+  if (q === state.widgetSent) return;
+  state.widgetSent = q;
   save();
-  setTimeout(renderToday, 300);
-};
+  renderWidgetButton();
+  location.href = `scriptable:///run/Macho?${q}`;
+}
 $('#widget-sync').onclick = () => {
   state.widgetSent = widgetQuery();
   save();
   setTimeout(renderWidgetButton, 300);
 };
-$('#widget-toggle').onchange = (ev) => { state.widget = ev.target.checked; save(); renderWidgetButton(); };
-$('#autosync-toggle').onchange = (ev) => { state.autoSync = ev.target.checked; save(); renderWidgetButton(); };
+$('#widget-toggle').onchange = (ev) => { state.widget = ev.target.checked; save(); };
+$('#autosync-toggle').onchange = (ev) => { state.autoSync = ev.target.checked; save(); };
 
 const scriptTexts = {};
 function prefetchScript() {

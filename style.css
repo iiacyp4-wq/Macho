@@ -235,10 +235,14 @@ h2 { font-size: 16px; margin: 0 0 12px; }
 
 .toast { position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom)); transform: translateX(-50%); background: #111827; color: #fff; padding: 10px 16px; border-radius: 999px; font-size: 14px; z-index: 20; white-space: nowrap; }
 
-/* 모아서 확정하기 바 (탭바 바로 위) */
-.confirm-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(66px + env(safe-area-inset-bottom)); width: calc(100% - 32px); max-width: 528px; display: flex; align-items: center; justify-content: space-between; gap: 8px; background: var(--accent); color: #fff; text-decoration: none; padding: 14px 18px; border-radius: 14px; font-size: 15px; box-shadow: 0 6px 18px rgba(0,0,0,.18); z-index: 6; }
-.confirm-bar[hidden] { display: none; }
-.confirm-bar b { white-space: nowrap; }
-body.has-confirm { padding-bottom: calc(136px + env(safe-area-inset-bottom)); }
-body.has-confirm .toast { bottom: calc(140px + env(safe-area-inset-bottom)); }
-.new-tag { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 6px; background: var(--accent); color: #fff; font-size: 10px; font-weight: 700; vertical-align: 2px; }
+/* 검색 창 아래 담은 음식 + 식단 기록 버튼 */
+.cart { position: sticky; bottom: calc(-24px - env(safe-area-inset-bottom)); margin: 12px -16px calc(-24px - env(safe-area-inset-bottom)); padding: 10px 16px calc(14px + env(safe-area-inset-bottom)); background: var(--card); border-top: 1px solid var(--line); box-shadow: 0 -6px 16px rgba(0,0,0,.08); }
+.cart[hidden] { display: none; }
+.cart-list { max-height: 30vh; overflow-y: auto; }
+.cart-meal { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 6px; font-size: 14px; }
+.cart-meal > b { margin-right: 2px; }
+.cart-item { display: inline-flex; align-items: center; gap: 4px; background: var(--head); border-radius: 999px; padding: 4px 4px 4px 10px; font-size: 13px; }
+.cart-item small { color: var(--muted); }
+.cart-item button { border: 0; background: none; color: var(--muted); width: 22px; height: 22px; padding: 0; font-size: 12px; }
+.cart .btn.wide { margin-top: 4px; }
+body:has(#search-sheet:not([hidden]) .cart:not([hidden])) .toast { bottom: auto; top: calc(env(safe-area-inset-top) + 64px); }

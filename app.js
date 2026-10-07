@@ -1,7 +1,7 @@
 'use strict';
 
 // 고칠 때마다 올리는 버전 (탭바 오른쪽 아래, 설정 맨 아래에 표시)
-const APP_VERSION = 'v1.30';
+const APP_VERSION = 'v1.31';
 
 const STORE_KEY = 'macho:v1';
 const MEALS = [
@@ -488,9 +488,9 @@ function updateAmountPreview() {
   $('#count-minus').disabled = x <= COUNT_MIN + 0.001;
   $('#count-plus').disabled = x >= COUNT_MAX - 0.001;
 }
-const COUNT_MIN = 0.5, COUNT_MAX = 20;
+const COUNT_MIN = 0.1, COUNT_MAX = 20;
 function setCount(x) {
-  x = Math.min(COUNT_MAX, Math.max(COUNT_MIN, Math.round(x * 2) / 2));
+  x = Math.min(COUNT_MAX, Math.max(COUNT_MIN, Math.round(x * 10) / 10));
   $('#amount-g').value = r1(amountCtx.food.g * x);
   updateAmountPreview();
   $('#amount-count').value = r1(x);

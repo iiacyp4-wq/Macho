@@ -1,7 +1,7 @@
 'use strict';
 
 // 고칠 때마다 올리는 버전 (탭바 오른쪽 아래, 설정 맨 아래에 표시)
-const APP_VERSION = 'v1.31';
+const APP_VERSION = 'v1.32';
 
 const STORE_KEY = 'macho:v1';
 const MEALS = [
@@ -147,7 +147,10 @@ function renderToday() {
         <div class="meal-right"><span class="meal-kcal"><b>${r0(kcal).toLocaleString()}</b> kcal</span>
         <button class="add-btn" data-add="${meal.id}" aria-label="${meal.name} 추가">＋</button></div>
       </div>
-      ${quick.length ? `<div class="quick">${quick.map((q, i) => `<button class="chip ${q.type}" data-quick="${meal.id}:${i}">${esc(q.label)}</button>`).join('')}</div>` : ''}
+      ${quick.length ? `<div class="quick">${quick.map((q, i) => {
+        const on = picks.some((p) => p.key === pickKey(meal.id, q));
+        return `<button class="chip ${q.type}${on ? ' picked' : ''}" data-quick="${meal.id}:${i}" aria-pressed="${on}">${on ? '✓ ' : ''}${esc(on ? q.label.replace(/^\S+ /, '') : q.label)}</button>`;
+      }).join('')}</div>` : ''}
       ${items.length ? '<div class="meal-items">' : ''}${items.map((e) => {
         const v = scale(e.food, e.grams);
         return `<div class="swipe-row"><button class="entry-del" data-del-entry="${e.id}" aria-label="${esc(e.food.n)} 삭제">−</button>
@@ -162,6 +165,7 @@ function renderToday() {
   renderWeight();
   renderBackupBanner();
   renderSuggest();
+  renderPicks();
 }
 
 // ---------- 끼니 바로가기: 세트 · 어제 그대로 · 자주 먹는 것 ----------
@@ -195,16 +199,40 @@ function frequentFoods(meal) {
   }
   return [...count.values()].filter((c) => c.n >= 2).sort((a, b) => b.n - a.n || a.last - b.last).slice(0, 4);
 }
-function addEntries(meal, list, label) {
+// list: [{ meal, grams, food }]
+function logEntries(list) {
   const day = (state.log[currentDay] ||= []);
   for (const it of list) {
-    day.push({ id: uid(), meal, grams: it.grams, food: { ...it.food } });
+    day.push({ id: uid(), meal: it.meal, grams: it.grams, food: { ...it.food } });
     state.recent = [{ ...it.food }, ...state.recent.filter((f) => f.n !== it.food.n)].slice(0, 30);
   }
-  save(); closeSheets(); renderToday();
-  toast(`${label} 추가!`);
-  autoSync();
+  save();
 }
+
+// ---------- 끼니 칩: 여러 개 담고 아래 '식단 기록'으로 한꺼번에 ----------
+let picks = []; // [{ key, meal, items }] — '식단 기록'을 눌러야 기록됨
+const pickKey = (meal, q) => `${meal}:${q.label}`;
+function renderPicks() {
+  // 기록이 바뀌어 사라진 칩은 담은 목록에서도 뺌
+  picks = picks.filter((p) => (quickMap[p.meal] || []).some((q) => pickKey(p.meal, q) === p.key));
+  const bar = $('#quick-bar');
+  bar.hidden = !picks.length;
+  if (bar.hidden) return;
+  const all = picks.flatMap((p) => p.items);
+  const k = all.reduce((sum, it) => sum + scale(it.food, it.grams).k, 0);
+  $('#quick-commit').textContent = `식단 기록 (${all.length}개 · ${r0(k).toLocaleString()} kcal)`;
+}
+// 검색 창의 '식단 기록'과 같은 방식: 링크라서 누르는 순간 href를 Scriptable 주소로 바꾸면 '◀ Macho'가 뜸
+$('#quick-commit').onclick = (ev) => {
+  const list = picks.flatMap((p) => p.items.map((it) => ({ meal: p.meal, grams: it.grams, food: it.food })));
+  picks = [];
+  logEntries(list);
+  renderToday();
+  toast(`${list.length}개 기록했어요!`);
+  const url = syncUrl();
+  if (url) ev.currentTarget.href = url;
+  else ev.preventDefault();
+};
 function saveSet(meal) {
   const items = (state.log[currentDay] || []).filter((e) => e.meal === meal);
   if (!items.length) return;
@@ -217,9 +245,9 @@ function saveSet(meal) {
   toast(`"${name}" 세트를 저장했어요`);
 }
 
-$('#prev-day').onclick = () => { currentDay = addDays(currentDay, -1); renderToday(); };
-$('#next-day').onclick = () => { currentDay = addDays(currentDay, 1); renderToday(); };
-$('#date-label').onclick = () => { currentDay = todayKey(); renderToday(); };
+$('#prev-day').onclick = () => { picks = []; currentDay = addDays(currentDay, -1); renderToday(); };
+$('#next-day').onclick = () => { picks = []; currentDay = addDays(currentDay, 1); renderToday(); };
+$('#date-label').onclick = () => { if (currentDay !== todayKey()) picks = []; currentDay = todayKey(); renderToday(); };
 $('#meals').onclick = (ev) => {
   const add = ev.target.closest('[data-add]');
   if (add) return openSearch(add.dataset.add);
@@ -227,7 +255,11 @@ $('#meals').onclick = (ev) => {
   if (quick) {
     const [meal, i] = quick.dataset.quick.split(':');
     const q = quickMap[meal][+i];
-    return addEntries(meal, q.items, q.type === 'food' ? q.items[0].food.n : q.label.replace(/^\S+ /, ''));
+    const key = pickKey(meal, q);
+    const at = picks.findIndex((p) => p.key === key);
+    if (at >= 0) picks.splice(at, 1);
+    else picks.push({ key, meal, items: q.items });
+    return renderToday();
   }
   const ss = ev.target.closest('[data-saveset]');
   if (ss) return saveSet(ss.dataset.saveset);
@@ -443,13 +475,9 @@ $('#cart-list').onclick = (ev) => {
 // 식단 기록 버튼은 링크(<a>)라서, 누르는 순간 href를 Scriptable 주소로 바꿔 두면 iOS가 손가락으로 연 것으로 보고
 // 왼쪽 위에 "◀ Macho" 돌아가기를 띄움 (location.href로 열면 이게 안 뜰 때가 있음)
 $('#cart-commit').onclick = (ev) => {
-  const day = (state.log[currentDay] ||= []);
-  for (const it of cart) {
-    day.push({ id: uid(), meal: it.meal, grams: it.grams, food: { ...it.food } });
-    state.recent = [{ ...it.food }, ...state.recent.filter((f) => f.n !== it.food.n)].slice(0, 30);
-  }
   const n = cart.length;
-  save(); closeSheets(); renderToday();
+  logEntries(cart);
+  closeSheets(); renderToday();
   toast(`${n}개 기록했어요!`);
   const url = syncUrl();
   if (url) ev.currentTarget.href = url;

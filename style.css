@@ -247,3 +247,12 @@ h2 { font-size: 16px; margin: 0 0 12px; }
 .cart .btn.wide { margin-top: 4px; }
 body:has(#search-sheet:not([hidden]) .cart:not([hidden])) .toast { bottom: auto; top: calc(env(safe-area-inset-top) + 64px); }
 #cart-commit { text-decoration: none; }
+
+/* 오늘 화면: 끼니 칩을 담았을 때 탭바 위에 뜨는 식단 기록 버튼 */
+.chip.picked { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.quick-bar { position: fixed; left: 0; right: 0; bottom: calc(67px + env(safe-area-inset-bottom)); max-width: 560px; margin: 0 auto; padding: 10px 16px 8px; background: var(--card); border-top: 1px solid var(--line); box-shadow: 0 -6px 16px rgba(0,0,0,.08); z-index: 4; text-align: center; }
+.quick-bar[hidden] { display: none; }
+.quick-bar p { margin: 4px 0 0; }
+#quick-commit { text-decoration: none; }
+body:has(#view-today.active .quick-bar:not([hidden])) { padding-bottom: calc(160px + env(safe-area-inset-bottom)); }
+body:has(#view-today.active .quick-bar:not([hidden])) .toast { bottom: calc(160px + env(safe-area-inset-bottom)); }
